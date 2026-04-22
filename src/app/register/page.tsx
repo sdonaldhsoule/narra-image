@@ -21,6 +21,7 @@ export default function RegisterPage() {
           <p className="max-w-xl text-base leading-8 text-[var(--ink-soft)]">
             注册成功会默认拿到 500 积分。邀请码由后台生成，
             这让你能控制产品节奏，也便于后续做精细化用户运营。
+            如果你使用的是管理员引导邮箱，首次注册时邀请码也可以留空。
           </p>
           <div className="studio-card rounded-[2rem] p-5 text-sm leading-7 text-[var(--ink-soft)]">
             已经有账号？

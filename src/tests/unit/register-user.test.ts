@@ -110,4 +110,33 @@ describe("注册流程", () => {
 
     expect(result.user.role).toBe("admin");
   });
+
+  it("首个管理员邮箱注册时可以跳过邀请码", async () => {
+    const markInviteUsed = vi.fn(async () => undefined);
+
+    const result = await registerUser(
+      {
+        email: "admin@example.com",
+        password: "super-secret-password",
+        inviteCode: "",
+      },
+      {
+        bootstrapAdminEmail: "admin@example.com",
+        initialCredits: 500,
+        findUserByEmail: async () => null,
+        findInviteByCode: async () => null,
+        hashPassword: async () => "hashed-password",
+        createUser: async (data) => ({ id: "admin_2", ...data }),
+        markInviteUsed,
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected success");
+    }
+
+    expect(result.user.role).toBe("admin");
+    expect(markInviteUsed).not.toHaveBeenCalled();
+  });
 });

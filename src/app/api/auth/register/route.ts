@@ -14,6 +14,19 @@ import { registerSchema } from "@/lib/validators";
 export async function POST(request: Request) {
   try {
     const body = registerSchema.parse(await parseJsonBody(request));
+    const bootstrapInviteCode =
+      process.env.BOOTSTRAP_INVITE_CODE?.trim() || "FOUNDING-ACCESS";
+
+    await db.inviteCode.upsert({
+      where: {
+        code: bootstrapInviteCode,
+      },
+      update: {},
+      create: {
+        code: bootstrapInviteCode,
+        note: "初始管理员邀请码",
+      },
+    });
 
     const result = await db.$transaction(async (tx) =>
       registerUser(body, {

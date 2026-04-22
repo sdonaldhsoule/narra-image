@@ -89,6 +89,7 @@ docker compose up --build -d
 - `db`: PostgreSQL 17
 
 容器启动时会自动执行 `prisma db push`，这样首次启动也能把当前 schema 推到数据库。
+同时也会自动执行 `prisma db seed`，确保初始邀请码能进入数据库。
 
 ## 关于模型拉取
 

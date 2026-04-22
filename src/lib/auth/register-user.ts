@@ -59,6 +59,7 @@ export async function registerUser(
 ): Promise<RegisterUserResult> {
   const email = input.email.trim().toLowerCase();
   const inviteCode = input.inviteCode.trim();
+  const bootstrapAdmin = isAdminEmail(email, deps.bootstrapAdminEmail);
 
   const existingUser = await deps.findUserByEmail(email);
   if (existingUser) {
@@ -68,8 +69,8 @@ export async function registerUser(
     };
   }
 
-  const invite = await deps.findInviteByCode(inviteCode);
-  if (!invite || invite.usedAt) {
+  const invite = inviteCode ? await deps.findInviteByCode(inviteCode) : null;
+  if (!bootstrapAdmin && (!invite || invite.usedAt)) {
     return {
       ok: false,
       message: "邀请码已失效",
@@ -77,9 +78,7 @@ export async function registerUser(
   }
 
   const passwordHash = await deps.hashPassword(input.password);
-  const role: UserRole = isAdminEmail(email, deps.bootstrapAdminEmail)
-    ? "admin"
-    : "user";
+  const role: UserRole = bootstrapAdmin ? "admin" : "user";
   const user = await deps.createUser({
     credits: deps.initialCredits,
     email,
@@ -87,10 +86,12 @@ export async function registerUser(
     role,
   });
 
-  await deps.markInviteUsed({
-    inviteId: invite.id,
-    userId: user.id,
-  });
+  if (invite) {
+    await deps.markInviteUsed({
+      inviteId: invite.id,
+      userId: user.id,
+    });
+  }
 
   return {
     ok: true,

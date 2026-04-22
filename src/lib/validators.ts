@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const registerSchema = z.object({
   email: z.email("请输入正确的邮箱"),
-  inviteCode: z.string().trim().min(1, "请输入邀请码"),
+  inviteCode: z.string().trim().default(""),
   password: z.string().min(8, "密码至少 8 位"),
 });
 
