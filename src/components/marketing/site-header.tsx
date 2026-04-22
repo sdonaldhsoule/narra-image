@@ -1,0 +1,68 @@
+import Link from "next/link";
+
+import { cn } from "@/lib/utils";
+
+type SiteHeaderProps = {
+  currentUser: {
+    credits: number;
+    role: "user" | "admin";
+  } | null;
+  className?: string;
+};
+
+export function SiteHeader({ currentUser, className }: SiteHeaderProps) {
+  return (
+    <header
+      className={cn(
+        "mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 md:px-8",
+        className,
+      )}
+    >
+      <Link href="/" className="flex items-center gap-3">
+        <span className="rounded-full border border-[var(--line)] bg-white/70 px-3 py-1 text-xs uppercase tracking-[0.35em] text-[var(--ink-soft)]">
+          Narra
+        </span>
+        <span className="editorial-title text-3xl font-semibold text-[var(--ink)]">
+          Image
+        </span>
+      </Link>
+
+      <nav className="hidden items-center gap-2 md:flex">
+        <Link href="/" className="ring-link rounded-full px-4 py-2 text-sm text-[var(--ink-soft)]">
+          首页
+        </Link>
+        <Link
+          href="/create"
+          className="ring-link rounded-full px-4 py-2 text-sm text-[var(--ink-soft)]"
+        >
+          创作台
+        </Link>
+        {currentUser?.role === "admin" ? (
+          <Link
+            href="/admin"
+            className="ring-link rounded-full px-4 py-2 text-sm text-[var(--ink-soft)]"
+          >
+            管理后台
+          </Link>
+        ) : null}
+      </nav>
+
+      <div className="flex items-center gap-3">
+        {currentUser ? (
+          <div className="studio-card rounded-full px-4 py-2 text-sm">
+            <span className="mr-2 text-[var(--ink-soft)]">剩余积分</span>
+            <span className="font-semibold text-[var(--accent)]">
+              {currentUser.credits}
+            </span>
+          </div>
+        ) : null}
+        <Link
+          href={currentUser ? "/create" : "/login"}
+          className="rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-medium text-white transition hover:-translate-y-0.5"
+        >
+          {currentUser ? "继续创作" : "登录开启"}
+        </Link>
+      </div>
+    </header>
+  );
+}

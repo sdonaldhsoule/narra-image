@@ -1,0 +1,44 @@
+import { getEnv } from "@/lib/env";
+import { getBuiltInProviderConfig } from "@/lib/providers/built-in-provider";
+import {
+  fetchOpenAICompatibleModelIds,
+  looksLikeImageModel,
+} from "@/lib/providers/model-catalog";
+import { requireCurrentUserRecord } from "@/lib/server/current-user";
+import {
+  getErrorMessage,
+  jsonError,
+  jsonOk,
+  parseJsonBody,
+} from "@/lib/server/http";
+import { providerProbeSchema } from "@/lib/validators";
+
+export async function POST(request: Request) {
+  try {
+    await requireCurrentUserRecord();
+    const body = providerProbeSchema.parse(await parseJsonBody(request));
+    const builtIn = await getBuiltInProviderConfig();
+    const apiKey = body.apiKey?.trim() || builtIn.apiKey || getEnv().BUILTIN_PROVIDER_API_KEY;
+
+    if (!apiKey) {
+      return jsonError("请先提供 API Key", 400);
+    }
+
+    const modelIds = await fetchOpenAICompatibleModelIds({
+      apiKey,
+      baseUrl: body.baseUrl,
+    });
+
+    return jsonOk({
+      models: modelIds.map((id) => ({
+        id,
+        imageLikely: looksLikeImageModel(id),
+      })),
+    });
+  } catch (error) {
+    return jsonError(
+      `当前渠道无法自动拉取模型：${getErrorMessage(error)}`,
+      400,
+    );
+  }
+}

@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+:root {
+  --surface: #f2eee6;
+  --surface-strong: #ebe1d1;
+  --card: rgba(255, 252, 247, 0.84);
+  --card-strong: rgba(255, 248, 238, 0.94);
+  --ink: #21170f;
+  --ink-soft: #635347;
+  --accent: #d9643a;
+  --accent-soft: #f1b99a;
+  --line: rgba(47, 30, 16, 0.12);
+  --shadow: 0 22px 70px rgba(94, 58, 33, 0.12);
+}
+
+@theme inline {
+  --color-background: var(--surface);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-bricolage);
+  --font-serif: var(--font-cormorant);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background:
+    radial-gradient(circle at top left, rgba(222, 126, 83, 0.18), transparent 28%),
+    radial-gradient(circle at right 20%, rgba(154, 119, 199, 0.12), transparent 20%),
+    linear-gradient(180deg, #f8f4ee 0%, #f0e8dc 100%);
+}
+
+body {
+  background:
+    radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.68), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+  color: var(--ink);
+  font-family: var(--font-bricolage), "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 120px 120px;
+  content: "";
+  mask-image: radial-gradient(circle at center, black 20%, transparent 82%);
+  pointer-events: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(217, 100, 58, 0.2);
+}
+
+.studio-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.noise-overlay {
+  position: relative;
+}
+
+.noise-overlay::after {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 25% 25%, rgba(255, 255, 255, 0.3) 0 1px, transparent 1px),
+    radial-gradient(circle at 75% 80%, rgba(33, 23, 15, 0.05) 0 1px, transparent 1px);
+  background-size: 14px 14px;
+  content: "";
+  mix-blend-mode: soft-light;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.editorial-title {
+  font-family: var(--font-cormorant), "Times New Roman", serif;
+  letter-spacing: -0.03em;
+}
+
+.ring-link {
+  border: 1px solid rgba(33, 23, 15, 0.15);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.ring-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(217, 100, 58, 0.45);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(99, 83, 71, 0.35);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
