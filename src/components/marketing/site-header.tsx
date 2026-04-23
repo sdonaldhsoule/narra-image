@@ -58,7 +58,7 @@ export function SiteHeader({ currentUser, className }: SiteHeaderProps) {
         ) : null}
         <Link
           href={currentUser ? "/create" : "/login"}
-          className="rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-semibold text-[var(--surface)] shadow-lg transition hover:-translate-y-0.5 hover:bg-[var(--accent)]"
+          className="rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-[var(--accent)]"
         >
           {currentUser ? "继续创作" : "登录开启"}
         </Link>
