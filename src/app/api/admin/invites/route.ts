@@ -46,22 +46,20 @@ export async function POST(request: Request) {
     const admin = await requireAdminRecord();
     const body = inviteCreateSchema.parse(await parseJsonBody(request));
 
-    const invite = await db.inviteCode.create({
-      data: {
-        code: createInviteCode(),
-        createdById: admin.id,
-        note: body.note || null,
-      },
+    const count = body.count || 1;
+    const data = Array.from({ length: count }).map(() => ({
+      code: createInviteCode(),
+      createdById: admin.id,
+      note: body.note || null,
+    }));
+
+    await db.inviteCode.createMany({
+      data,
     });
 
     return jsonOk(
       {
-        invite: {
-          code: invite.code,
-          createdAt: invite.createdAt.toISOString(),
-          id: invite.id,
-          note: invite.note,
-        },
+        message: `成功生成 ${count} 个邀请码`,
       },
       { status: 201 },
     );

@@ -35,12 +35,12 @@ export default async function AdminInvitesPage() {
       <section className="mx-auto grid max-w-7xl gap-6 px-5 pt-6 md:px-8">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.32em] text-[var(--ink-soft)]">
-              Invite Control
-            </p>
-            <h1 className="editorial-title mt-3 text-5xl font-semibold">
-              邀请码不只是准入门槛，也是运营来源标签。
+            <h1 className="text-3xl font-semibold tracking-tight text-[var(--ink)] md:text-4xl">
+              邀请码管理
             </h1>
+            <p className="mt-2 text-sm text-[var(--ink-soft)]">
+              批量生成和管理系统的准入邀请码。
+            </p>
           </div>
           <AdminNav currentPath="/admin/invites" />
         </div>

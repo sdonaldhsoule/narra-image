@@ -213,7 +213,7 @@ export function GeneratorStudio({
 
   return (
     <section
-      className={`grid gap-6 md:gap-8 items-start ${compact ? "xl:grid-cols-[1.2fr_0.8fr]" : "xl:grid-cols-[1.05fr_0.95fr]"}`}
+      className={`grid gap-6 md:gap-8 items-start ${compact ? "lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]" : "lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]"}`}
     >
       <div className="flex min-w-0 flex-col gap-6 md:gap-8">
         <div className="studio-card noise-overlay relative flex flex-col overflow-hidden rounded-[2rem] p-6 md:p-8">
