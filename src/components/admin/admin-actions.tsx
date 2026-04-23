@@ -14,6 +14,7 @@ export function InviteCreator() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [note, setNote] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
   const [count, setCount] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,7 +23,7 @@ export function InviteCreator() {
     const response = await fetch("/api/admin/invites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note, count }),
+      body: JSON.stringify({ note, count, isPublic }),
     });
     const result = (await response.json()) as { error?: string };
 
@@ -32,6 +33,7 @@ export function InviteCreator() {
     }
 
     setNote("");
+    setIsPublic(false);
     setCount(1);
     startTransition(() => {
       router.refresh();
@@ -52,6 +54,14 @@ export function InviteCreator() {
           className="flex-1 rounded-2xl border border-[var(--line)] bg-white/70 px-4 py-3 outline-none transition-all focus:border-[var(--accent)]"
         />
         <div className="flex items-center gap-3">
+          <label className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] bg-white/70 px-4 py-3 text-sm text-[var(--ink-soft)]">
+            <input
+              type="checkbox"
+              checked={isPublic}
+              onChange={(event) => setIsPublic(event.target.checked)}
+            />
+            开放领取
+          </label>
           <input
             type="number"
             min={1}
@@ -73,6 +83,48 @@ export function InviteCreator() {
       </div>
       {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
     </div>
+  );
+}
+
+export function InviteBatchToggle({
+  batchId,
+  isPublic,
+}: {
+  batchId: string;
+  isPublic: boolean;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  async function handleToggle() {
+    await fetch(`/api/admin/invites/batches/${batchId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        isPublic: !isPublic,
+      }),
+    });
+
+    startTransition(() => {
+      router.refresh();
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={isPending}
+      onClick={() => startTransition(handleToggle)}
+      className={`rounded-full px-3 py-2 text-xs font-medium ${
+        isPublic
+          ? "bg-[var(--accent)] text-white"
+          : "border border-[var(--line)] text-[var(--ink-soft)]"
+      }`}
+    >
+      {isPending ? "处理中..." : isPublic ? "关闭领取" : "开放领取"}
+    </button>
   );
 }
 

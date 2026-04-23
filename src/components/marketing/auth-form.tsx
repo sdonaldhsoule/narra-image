@@ -4,10 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 type AuthFormProps = {
+  initialInviteCode?: string;
   mode: "login" | "register";
 };
 
-export function AuthForm({ mode }: AuthFormProps) {
+export function AuthForm({ mode, initialInviteCode = "" }: AuthFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +79,7 @@ export function AuthForm({ mode }: AuthFormProps) {
           <label className="text-sm text-[var(--ink-soft)]">邀请码</label>
           <input
             name="inviteCode"
+            defaultValue={initialInviteCode}
             placeholder="FOUNDING-ACCESS"
             className="rounded-2xl border border-[var(--line)] bg-white/70 px-4 py-3 uppercase outline-none transition focus:border-[var(--accent)]"
           />
