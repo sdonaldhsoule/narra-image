@@ -43,12 +43,24 @@ model User {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   inviteUsed           InviteCode?           @relation("InviteUsedBy")
+  inviteBatches        InviteBatch[]         @relation("InviteBatchCreatedBy")
   createdInvites       InviteCode[]          @relation("InviteCreatedBy")
   customProviderConfig SavedProviderConfig?
   checkInRecords       CheckInRecord[]
   generations          GenerationJob[]
   featuredGenerations  GenerationJob[]       @relation("FeaturedByAdmin")
   reviewedWorks        GenerationImage[]     @relation("ReviewedWorks")
+}
+
+model InviteBatch {
+  id          String       @id @default(cuid())
+  title       String?
+  isPublic    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  createdById String?
+  createdBy   User?        @relation("InviteBatchCreatedBy", fields: [createdById], references: [id])
+  inviteCodes InviteCode[]
 }
 
 model BenefitConfig {
@@ -87,10 +99,13 @@ model InviteCode {
   id          String   @id @default(cuid())
   code        String   @unique
   note        String?
+  batchId     String?
+  claimedAt   DateTime?
   createdAt   DateTime @default(now())
   usedAt      DateTime?
   createdById String?
   usedById    String?  @unique
+  batch       InviteBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
   createdBy   User?    @relation("InviteCreatedBy", fields: [createdById], references: [id])
   usedBy      User?    @relation("InviteUsedBy", fields: [usedById], references: [id])
 }

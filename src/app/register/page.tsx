@@ -3,7 +3,18 @@ import Link from "next/link";
 import { AuthForm } from "@/components/marketing/auth-form";
 import { SiteHeader } from "@/components/marketing/site-header";
 
-export default function RegisterPage() {
+type RegisterPageProps = {
+  searchParams?: Promise<{
+    inviteCode?: string;
+  }>;
+};
+
+export default async function RegisterPage({ searchParams }: RegisterPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const initialInviteCode = typeof resolvedSearchParams?.inviteCode === "string"
+    ? resolvedSearchParams.inviteCode
+    : "";
+
   return (
     <main className="pb-20">
       <SiteHeader currentUser={null} />
@@ -31,7 +42,7 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        <AuthForm mode="register" />
+        <AuthForm initialInviteCode={initialInviteCode} mode="register" />
       </section>
     </main>
   );

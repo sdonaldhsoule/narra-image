@@ -40,6 +40,7 @@ export const generateSchema = z.object({
 export const inviteCreateSchema = z.object({
   note: z.string().trim().max(120).optional().nullable(),
   count: z.number().int().min(1).max(100).default(1),
+  isPublic: z.boolean().default(false),
 });
 
 export const creditUpdateSchema = z.object({
