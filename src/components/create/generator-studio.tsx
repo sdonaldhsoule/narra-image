@@ -1,7 +1,7 @@
 "use client";
 
-import { Sparkles, WandSparkles, Download, ZoomIn, X, ImagePlus, Settings2, Send, Paperclip, SquarePen } from "lucide-react";
-import { useMemo, useRef, useState, useTransition, useEffect } from "react";
+import { Sparkles, WandSparkles, Download, ZoomIn, X, ImagePlus, Settings2, Send, Paperclip, SquarePen, PanelLeftClose, PanelLeftOpen, Trash2, MessageSquare } from "lucide-react";
+import { useMemo, useRef, useState, useTransition, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 import { CheckInButton } from "@/components/benefits/check-in-button";
@@ -349,51 +349,129 @@ export function GeneratorStudio({
   }
 
   function handleNewConversation() {
-    setGenerations([]);
     setPrompt("");
     setNegativePrompt("");
     setReferenceImage(null);
     setGenerationType("text_to_image");
     setError(null);
     setShowSettings(false);
+    // Scroll to bottom
+    setTimeout(() => {
+      scrollAreaRef.current?.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: "smooth" });
+    }, 100);
+  }
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const scrollToGeneration = useCallback((id: string) => {
+    const el = document.getElementById(`gen-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    // Close sidebar on mobile after click
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  }, []);
+
+  function formatTime(dateStr: string) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const time = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+    if (isToday) return `今天 ${time}`;
+    return `${(d.getMonth()+1).toString().padStart(2,"0")}/${d.getDate().toString().padStart(2,"0")} ${time}`;
   }
 
   return (
-    <div className="flex h-full w-full flex-col relative bg-gradient-to-b from-[var(--surface)] to-[var(--surface-strong)]/20">
-      {/* 新建对话按钮 */}
-      {sortedGenerations.length > 0 && (
-        <div className="absolute top-3 right-4 z-10 md:right-8">
+    <div className="flex h-full w-full relative">
+      {/* 左侧会话历史侧边栏 */}
+      {/* 移动端遮罩 */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      <aside className={`${
+        sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      } fixed md:relative z-40 md:z-0 flex h-full w-64 shrink-0 flex-col border-r border-[var(--line)] bg-[var(--surface)] transition-transform duration-200 ease-out`}>
+        {/* 侧边栏头部 */}
+        <div className="flex items-center gap-2 p-3 border-b border-[var(--line)]">
           <button
             onClick={handleNewConversation}
-            className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)]/80 backdrop-blur-md px-3.5 py-2 text-xs font-medium text-[var(--ink-soft)] shadow-sm transition-all hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="flex flex-1 items-center gap-2 rounded-xl bg-[var(--ink)] px-4 py-2.5 text-xs font-medium text-white shadow-sm transition hover:bg-[var(--accent)]"
           >
             <SquarePen className="size-3.5" />
             新建对话
           </button>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg p-2 text-[var(--ink-soft)] transition hover:bg-[var(--surface-strong)] md:hidden"
+          >
+            <PanelLeftClose className="size-4" />
+          </button>
         </div>
-      )}
 
-      {/* 对话流区域 */}
-      <div 
-        ref={scrollAreaRef}
-        className="flex-1 overflow-y-auto px-4 pb-40 pt-4 md:px-8 scroll-smooth"
-        style={{ scrollbarWidth: "thin" }}
-      >
-        <div className="mx-auto max-w-4xl space-y-8">
+        {/* 会话列表 */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1" style={{ scrollbarWidth: "thin" }}>
           {sortedGenerations.length === 0 ? (
-            <div className="flex h-[40vh] flex-col items-center justify-center text-center">
-              <div className="mb-6 rounded-full bg-gradient-to-br from-[var(--accent)]/20 to-purple-500/20 p-5 ring-1 ring-[var(--line)]">
-                <WandSparkles className="size-8 text-[var(--accent)]" />
-              </div>
-              <h2 className="text-2xl font-semibold tracking-tight text-[var(--ink)]">你好，你想创作什么？</h2>
-              <p className="mt-2 text-[var(--ink-soft)] max-w-md">
-                在下方输入描述开始生成图片，或者直接粘贴一张图片进入图生图模式。
-              </p>
+            <div className="flex flex-col items-center justify-center h-32 text-center">
+              <MessageSquare className="size-6 text-[var(--ink-soft)] opacity-30 mb-2" />
+              <p className="text-xs text-[var(--ink-soft)]">暂无会话记录</p>
             </div>
           ) : (
-            sortedGenerations.map((generation) => (
-              <div key={generation.id} className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {/* 用户消息 */}
+            sortedGenerations.map((gen) => (
+              <button
+                key={gen.id}
+                type="button"
+                onClick={() => scrollToGeneration(gen.id)}
+                className="group flex w-full flex-col gap-1 rounded-xl px-3 py-2.5 text-left transition hover:bg-[var(--surface-strong)]"
+              >
+                <span className="text-xs font-medium text-[var(--ink)] truncate leading-tight">
+                  {gen.prompt.length > 30 ? gen.prompt.slice(0, 30) + "..." : gen.prompt}
+                </span>
+                <span className="flex items-center gap-2 text-[10px] text-[var(--ink-soft)]">
+                  <span>{gen.generationType === "image_to_image" ? "图生图" : "文生图"}</span>
+                  <span>·</span>
+                  <span>{formatTime(gen.createdAt)}</span>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
+      {/* 主内容区 */}
+      <div className="flex flex-1 flex-col relative bg-gradient-to-b from-[var(--surface)] to-[var(--surface-strong)]/20 min-w-0">
+        {/* 顶部工具栏 */}
+        <div className="flex items-center gap-2 px-4 py-2 md:px-6">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="rounded-lg p-2 text-[var(--ink-soft)] transition hover:bg-[var(--surface-strong)] md:hidden"
+          >
+            <PanelLeftOpen className="size-4" />
+          </button>
+        </div>
+
+        {/* 对话流区域 */}
+        <div
+          ref={scrollAreaRef}
+          className="flex-1 overflow-y-auto px-4 pb-40 md:px-8 scroll-smooth"
+          style={{ scrollbarWidth: "thin" }}
+        >
+          <div className="mx-auto max-w-3xl space-y-8">
+            {sortedGenerations.length === 0 ? (
+              <div className="flex h-[40vh] flex-col items-center justify-center text-center">
+                <div className="mb-6 rounded-full bg-gradient-to-br from-[var(--accent)]/20 to-purple-500/20 p-5 ring-1 ring-[var(--line)]">
+                  <WandSparkles className="size-8 text-[var(--accent)]" />
+                </div>
+                <h2 className="text-2xl font-semibold tracking-tight text-[var(--ink)]">你好，你想创作什么？</h2>
+                <p className="mt-2 text-[var(--ink-soft)] max-w-md">
+                  在下方输入描述开始生成图片，或者直接粘贴一张图片进入图生图模式。
+                </p>
+              </div>
+            ) : (
+              sortedGenerations.map((generation) => (
+                <div key={generation.id} id={`gen-${generation.id}`} className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex gap-4">
                   <div className="shrink-0 flex size-9 items-center justify-center rounded-full bg-[var(--surface-strong)] border border-[var(--line)] text-sm font-semibold">
                     You
@@ -849,6 +927,7 @@ export function GeneratorStudio({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

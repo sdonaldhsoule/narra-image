@@ -96,11 +96,33 @@ export async function getChannelById(id: string): Promise<ResolvedChannel | null
 
 /**
  * Get all channels for admin — without decrypting API keys.
+ * Also auto-migrates legacy BuiltInProviderConfig data if no channels exist.
  */
 export async function getChannelsForAdmin() {
-  const channels = await db.providerChannel.findMany({
+  let channels = await db.providerChannel.findMany({
     orderBy: { sortOrder: "asc" },
   });
+
+  // Auto-migrate from legacy BuiltInProviderConfig if no channels yet
+  if (channels.length === 0) {
+    const legacy = await db.builtInProviderConfig.findFirst();
+    if (legacy) {
+      const migrated = await db.providerChannel.create({
+        data: {
+          apiKeyEncrypted: legacy.apiKeyEncrypted,
+          baseUrl: legacy.baseUrl,
+          creditCost: legacy.creditCost,
+          defaultModel: legacy.model,
+          isActive: true,
+          models: legacy.models,
+          name: legacy.name || "默认渠道",
+          slug: "default",
+          sortOrder: 0,
+        },
+      });
+      channels = [migrated];
+    }
+  }
 
   return channels.map((ch) => ({
     apiKeyConfigured: Boolean(ch.apiKeyEncrypted),
