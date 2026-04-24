@@ -37,6 +37,14 @@ type SavedProvider = {
   model: string;
 } | null;
 
+type ChannelInfo = {
+  creditCost: number;
+  defaultModel: string;
+  id: string;
+  models: string[];
+  name: string;
+};
+
 type GeneratorStudioProps = {
   compact?: boolean;
   checkInSummary: {
@@ -46,8 +54,7 @@ type GeneratorStudioProps = {
   currentUser: ViewerUser;
   initialGenerations?: GenerationItem[];
   initialSavedProvider?: (SavedProvider & { models?: string[] }) | null;
-  builtInModels?: string[];
-  builtInDefaultModel?: string;
+  channels?: ChannelInfo[];
 };
 
 const stylePresets = [
@@ -65,8 +72,7 @@ export function GeneratorStudio({
   currentUser,
   initialGenerations = [],
   initialSavedProvider = null,
-  builtInModels = [],
-  builtInDefaultModel = "",
+  channels = [],
 }: GeneratorStudioProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -76,8 +82,12 @@ export function GeneratorStudio({
   const [generationType, setGenerationType] = useState<GenerationType>("text_to_image");
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(
+    channels[0]?.id ?? null
+  );
+  const selectedChannel = channels.find((c) => c.id === selectedChannelId) ?? channels[0] ?? null;
   const [model, setModel] = useState(
-    initialSavedProvider?.model || builtInDefaultModel || "dall-e-3",
+    initialSavedProvider?.model || selectedChannel?.defaultModel || "gpt-image-1",
   );
   const [availableModels, setAvailableModels] = useState<string[]>(
     initialSavedProvider?.models || []
@@ -180,6 +190,9 @@ export function GeneratorStudio({
               formData.append("model", model);
               formData.append("prompt", prompt);
               formData.append("providerMode", providerMode);
+              if (selectedChannelId && providerMode === "built_in") {
+                formData.append("channelId", selectedChannelId);
+              }
               if (referenceImage) {
                 formData.append("image", referenceImage.file);
               }
@@ -198,6 +211,7 @@ export function GeneratorStudio({
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
+              channelId: providerMode === "built_in" ? selectedChannelId : undefined,
               count,
               customProvider:
                 providerMode === "custom"
@@ -653,16 +667,30 @@ export function GeneratorStudio({
                 </button>
               </div>
 
-              {/* 右侧：模型选择 */}
-              <div className="hidden md:flex items-center gap-2">
-                <span className="text-xs text-[var(--ink-soft)]">模型:</span>
+              {/* 右侧：渠道 + 模型选择 */}
+              <div className="hidden md:flex items-center gap-3">
+                {providerMode === "built_in" && channels.length > 1 && (
+                  <select
+                    value={selectedChannelId ?? ""}
+                    onChange={(e) => {
+                      setSelectedChannelId(e.target.value);
+                      const ch = channels.find((c) => c.id === e.target.value);
+                      if (ch) setModel(ch.defaultModel);
+                    }}
+                    className="bg-transparent text-xs font-medium text-[var(--ink)] outline-none border-none cursor-pointer"
+                  >
+                    {channels.map((ch) => (
+                      <option key={ch.id} value={ch.id}>{ch.name}</option>
+                    ))}
+                  </select>
+                )}
                 <select
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   className="bg-transparent text-xs font-medium text-[var(--ink)] outline-none border-none cursor-pointer"
                 >
                   <option value={model}>{model}</option>
-                  {(providerMode === "built_in" ? builtInModels : availableModels).map((m) => (
+                  {(providerMode === "built_in" ? (selectedChannel?.models ?? []) : availableModels).map((m: string) => (
                     m !== model && <option key={m} value={m}>{m}</option>
                   ))}
                 </select>

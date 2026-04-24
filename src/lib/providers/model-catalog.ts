@@ -10,9 +10,10 @@ const IMAGE_HINTS = [
   "midjourney",
   "visual",
   "vision-image",
+  "grok",
 ];
 
-const PRIORITY_HINTS = ["image", "imagen", "dall-e"];
+const PRIORITY_HINTS = ["image", "imagen", "dall-e", "grok"];
 
 export function looksLikeImageModel(modelId: string) {
   const id = modelId.toLowerCase();

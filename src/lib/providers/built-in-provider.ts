@@ -1,61 +1,146 @@
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
-import { mergeBuiltInProviderConfigInput, resolveBuiltInProviderConfig } from "@/lib/providers/built-in-provider-core";
 import { decryptProviderSecret } from "@/lib/providers/provider-secret";
 
-type BasicBuiltInProviderConfig = {
+/**
+ * Resolved channel config used for generation.
+ */
+export type ResolvedChannel = {
   apiKey: string;
   baseUrl: string;
   creditCost: number;
-  model: string;
+  defaultModel: string;
+  id: string;
   models: string[];
   name: string;
 };
 
-export { mergeBuiltInProviderConfigInput, resolveBuiltInProviderConfig };
-
-export async function getBuiltInProviderConfig() {
+/**
+ * Get all active provider channels, ordered by sortOrder.
+ */
+export async function getActiveChannels(): Promise<ResolvedChannel[]> {
   const env = getEnv();
-  const envConfig: BasicBuiltInProviderConfig = {
-    apiKey: env.BUILTIN_PROVIDER_API_KEY || "",
-    baseUrl: env.BUILTIN_PROVIDER_BASE_URL || "",
-    creditCost: env.BUILTIN_PROVIDER_CREDIT_COST,
-    model: env.BUILTIN_PROVIDER_MODEL,
-    models: [],
-    name: env.BUILTIN_PROVIDER_NAME,
-  };
-
-  const stored = await db.builtInProviderConfig.findUnique({
-    where: { scope: "default" },
+  const channels = await db.providerChannel.findMany({
+    where: { isActive: true },
+    orderBy: { sortOrder: "asc" },
   });
 
-  if (!stored) {
-    return envConfig;
+  if (channels.length === 0) {
+    // Fallback to env config if no channels in DB
+    const envKey = env.BUILTIN_PROVIDER_API_KEY || "";
+    const envBase = env.BUILTIN_PROVIDER_BASE_URL || "";
+    if (!envKey || !envBase) return [];
+
+    return [
+      {
+        apiKey: envKey,
+        baseUrl: envBase,
+        creditCost: env.BUILTIN_PROVIDER_CREDIT_COST,
+        defaultModel: env.BUILTIN_PROVIDER_MODEL,
+        id: "__env__",
+        models: [],
+        name: env.BUILTIN_PROVIDER_NAME,
+      },
+    ];
   }
 
-  return resolveBuiltInProviderConfig(envConfig, {
-    apiKey: await decryptProviderSecret(stored.apiKeyEncrypted, env.AUTH_SECRET),
-    baseUrl: stored.baseUrl,
-    creditCost: stored.creditCost,
-    model: stored.model,
-    models: stored.models,
-    name: stored.name,
-  });
+  return Promise.all(
+    channels.map(async (ch) => ({
+      apiKey: await decryptProviderSecret(ch.apiKeyEncrypted, env.AUTH_SECRET),
+      baseUrl: ch.baseUrl,
+      creditCost: ch.creditCost,
+      defaultModel: ch.defaultModel,
+      id: ch.id,
+      models: ch.models,
+      name: ch.name,
+    })),
+  );
 }
 
-export async function getBuiltInProviderConfigForAdmin() {
+/**
+ * Get a single channel by ID — used during generation.
+ */
+export async function getChannelById(id: string): Promise<ResolvedChannel | null> {
   const env = getEnv();
-  const stored = await db.builtInProviderConfig.findUnique({
-    where: { scope: "default" },
-  });
+
+  // env fallback
+  if (id === "__env__") {
+    const envKey = env.BUILTIN_PROVIDER_API_KEY || "";
+    const envBase = env.BUILTIN_PROVIDER_BASE_URL || "";
+    if (!envKey || !envBase) return null;
+
+    return {
+      apiKey: envKey,
+      baseUrl: envBase,
+      creditCost: env.BUILTIN_PROVIDER_CREDIT_COST,
+      defaultModel: env.BUILTIN_PROVIDER_MODEL,
+      id: "__env__",
+      models: [],
+      name: env.BUILTIN_PROVIDER_NAME,
+    };
+  }
+
+  const ch = await db.providerChannel.findUnique({ where: { id } });
+  if (!ch) return null;
 
   return {
-    apiKeyConfigured: Boolean(stored?.apiKeyEncrypted || env.BUILTIN_PROVIDER_API_KEY),
-    baseUrl: stored?.baseUrl || env.BUILTIN_PROVIDER_BASE_URL || "",
-    creditCost: stored?.creditCost || env.BUILTIN_PROVIDER_CREDIT_COST,
-    model: stored?.model || env.BUILTIN_PROVIDER_MODEL,
-    models: stored?.models || [],
-    name: stored?.name || env.BUILTIN_PROVIDER_NAME,
-    source: (stored ? "database" : "env") as "database" | "env",
+    apiKey: await decryptProviderSecret(ch.apiKeyEncrypted, env.AUTH_SECRET),
+    baseUrl: ch.baseUrl,
+    creditCost: ch.creditCost,
+    defaultModel: ch.defaultModel,
+    id: ch.id,
+    models: ch.models,
+    name: ch.name,
+  };
+}
+
+/**
+ * Get all channels for admin — without decrypting API keys.
+ */
+export async function getChannelsForAdmin() {
+  const channels = await db.providerChannel.findMany({
+    orderBy: { sortOrder: "asc" },
+  });
+
+  return channels.map((ch) => ({
+    apiKeyConfigured: Boolean(ch.apiKeyEncrypted),
+    baseUrl: ch.baseUrl,
+    creditCost: ch.creditCost,
+    defaultModel: ch.defaultModel,
+    id: ch.id,
+    isActive: ch.isActive,
+    models: ch.models,
+    name: ch.name,
+    slug: ch.slug,
+    sortOrder: ch.sortOrder,
+  }));
+}
+
+/**
+ * Backwards-compat: get the first active channel as "built-in config"
+ * Used by generate route when no channelId is provided.
+ */
+export async function getBuiltInProviderConfig() {
+  const channels = await getActiveChannels();
+  const first = channels[0];
+  if (!first) {
+    const env = getEnv();
+    return {
+      apiKey: env.BUILTIN_PROVIDER_API_KEY || "",
+      baseUrl: env.BUILTIN_PROVIDER_BASE_URL || "",
+      creditCost: env.BUILTIN_PROVIDER_CREDIT_COST,
+      model: env.BUILTIN_PROVIDER_MODEL,
+      models: [] as string[],
+      name: env.BUILTIN_PROVIDER_NAME,
+    };
+  }
+
+  return {
+    apiKey: first.apiKey,
+    baseUrl: first.baseUrl,
+    creditCost: first.creditCost,
+    model: first.defaultModel,
+    models: first.models,
+    name: first.name,
   };
 }

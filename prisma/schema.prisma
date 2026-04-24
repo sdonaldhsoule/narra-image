@@ -82,15 +82,17 @@ model CheckInRecord {
   @@unique([userId, dateKey])
 }
 
-model BuiltInProviderConfig {
+model ProviderChannel {
   id              String   @id @default(cuid())
-  scope           String   @unique @default("default")
   name            String
+  slug            String   @unique
   baseUrl         String
   apiKeyEncrypted String
-  model           String
+  defaultModel    String
   models          String[] @default([])
   creditCost      Int      @default(5)
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

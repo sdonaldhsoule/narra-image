@@ -11,6 +11,7 @@ describe("内置渠道配置", () => {
         baseUrl: "https://env.example.com/v1",
         creditCost: 5,
         model: "gpt-image-1",
+        models: [],
         name: "Env Provider",
       },
       {
@@ -18,6 +19,7 @@ describe("内置渠道配置", () => {
         baseUrl: "https://db.example.com/v1",
         creditCost: 12,
         model: "gemini-2.5-flash-image",
+        models: [],
         name: "DB Provider",
       },
     );
@@ -27,6 +29,7 @@ describe("内置渠道配置", () => {
       baseUrl: "https://db.example.com/v1",
       creditCost: 12,
       model: "gemini-2.5-flash-image",
+      models: [],
       name: "DB Provider",
     });
   });
@@ -38,6 +41,7 @@ describe("内置渠道配置", () => {
         baseUrl: "https://new.example.com/v1",
         creditCost: 8,
         model: "gpt-image-1",
+        models: [],
         name: "Studio New",
       },
       {
@@ -45,6 +49,7 @@ describe("内置渠道配置", () => {
         baseUrl: "https://old.example.com/v1",
         creditCost: 5,
         model: "old-model",
+        models: [],
         name: "Studio Old",
       },
     );
@@ -54,6 +59,7 @@ describe("内置渠道配置", () => {
       baseUrl: "https://new.example.com/v1",
       creditCost: 8,
       model: "gpt-image-1",
+      models: [],
       name: "Studio New",
     });
   });

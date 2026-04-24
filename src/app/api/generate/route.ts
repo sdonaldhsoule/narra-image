@@ -9,7 +9,7 @@ import {
   toPrismaGenerationType,
   toPrismaProviderMode,
 } from "@/lib/prisma-mappers";
-import { getBuiltInProviderConfig } from "@/lib/providers/built-in-provider";
+import { getBuiltInProviderConfig, getChannelById } from "@/lib/providers/built-in-provider";
 import { decryptProviderSecret, encryptProviderSecret } from "@/lib/providers/provider-secret";
 import { requireCurrentUserRecord } from "@/lib/server/current-user";
 import { getErrorMessage, jsonError, jsonOk } from "@/lib/server/http";
@@ -23,7 +23,23 @@ export async function POST(request: Request) {
     const user = await requireCurrentUserRecord();
     const body = await parseGenerateRequest(request);
     const env = getEnv();
-    const builtInProvider = await getBuiltInProviderConfig();
+    // Resolve channel: use channelId if given, else fall back to first active channel
+    const channelId = body.channelId as string | undefined;
+    let builtInProvider;
+    if (channelId) {
+      const channel = await getChannelById(channelId);
+      if (!channel) return jsonError("所选渠道不存在或已被停用", 400);
+      builtInProvider = {
+        apiKey: channel.apiKey,
+        baseUrl: channel.baseUrl,
+        creditCost: channel.creditCost,
+        model: channel.defaultModel,
+        models: channel.models,
+        name: channel.name,
+      };
+    } else {
+      builtInProvider = await getBuiltInProviderConfig();
+    }
     const cost = calculateGenerationCost({
       builtInCreditCost: builtInProvider.creditCost,
       providerMode: body.providerMode,

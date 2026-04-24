@@ -1,75 +1,42 @@
-import { db } from "@/lib/db";
-import { getEnv } from "@/lib/env";
-import {
-  getBuiltInProviderConfigForAdmin,
-  mergeBuiltInProviderConfigInput,
-} from "@/lib/providers/built-in-provider";
-import { encryptProviderSecret } from "@/lib/providers/provider-secret";
+import { getChannelsForAdmin } from "@/lib/providers/built-in-provider";
 import { requireAdminRecord } from "@/lib/server/current-user";
 import {
   getErrorMessage,
   jsonError,
   jsonOk,
-  parseJsonBody,
 } from "@/lib/server/http";
-import { builtInProviderConfigSchema } from "@/lib/validators";
 
+/**
+ * GET /api/admin/provider-config — backwards compat, returns channels list
+ */
 export async function GET() {
   try {
     await requireAdminRecord();
-
+    const channels = await getChannelsForAdmin();
+    // Return first channel as the "providerConfig" for backwards compat
+    const first = channels[0];
     return jsonOk({
-      providerConfig: await getBuiltInProviderConfigForAdmin(),
+      providerConfig: first
+        ? {
+            apiKeyConfigured: first.apiKeyConfigured,
+            baseUrl: first.baseUrl,
+            creditCost: first.creditCost,
+            model: first.defaultModel,
+            models: first.models,
+            name: first.name,
+            source: "database" as const,
+          }
+        : null,
+      channels,
     });
   } catch (error) {
     return jsonError(getErrorMessage(error), 403);
   }
 }
 
-export async function PATCH(request: Request) {
-  try {
-    await requireAdminRecord();
-    const body = builtInProviderConfigSchema.parse(await parseJsonBody(request));
-    const env = getEnv();
-    const current = await db.builtInProviderConfig.findUnique({
-      where: { scope: "default" },
-    });
-    const merged = mergeBuiltInProviderConfigInput(body, current);
-
-    await db.builtInProviderConfig.upsert({
-      where: { scope: "default" },
-      update: {
-        apiKeyEncrypted:
-          merged.apiKey !== null
-            ? await encryptProviderSecret(merged.apiKey, env.AUTH_SECRET)
-            : current?.apiKeyEncrypted ?? "",
-        baseUrl: merged.baseUrl,
-        creditCost: merged.creditCost,
-        model: merged.model,
-        models: merged.models,
-        name: merged.name,
-      },
-      create: {
-        apiKeyEncrypted:
-          merged.apiKey !== null
-            ? await encryptProviderSecret(merged.apiKey, env.AUTH_SECRET)
-            : await encryptProviderSecret(
-                env.BUILTIN_PROVIDER_API_KEY || "",
-                env.AUTH_SECRET,
-              ),
-        baseUrl: merged.baseUrl,
-        creditCost: merged.creditCost,
-        model: merged.model,
-        models: merged.models,
-        name: merged.name,
-        scope: "default",
-      },
-    });
-
-    return jsonOk({
-      providerConfig: await getBuiltInProviderConfigForAdmin(),
-    });
-  } catch (error) {
-    return jsonError(getErrorMessage(error), 400);
-  }
+/**
+ * PATCH — deprecated, use /api/admin/channels instead.
+ */
+export async function PATCH() {
+  return jsonError("此接口已废弃，请使用 /api/admin/channels 管理渠道", 410);
 }

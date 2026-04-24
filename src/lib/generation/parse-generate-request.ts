@@ -45,6 +45,7 @@ export async function parseGenerateRequest(request: Request | FormData) {
 
     return {
       ...body,
+      channelId: toNullableString(formData.get("channelId")) || undefined,
       count: 1,
       image,
     };
@@ -60,10 +61,12 @@ export async function parseGenerateRequest(request: Request | FormData) {
     return parseFormData(await request.formData());
   }
 
-  const body = generateSchema.parse(await request.json());
+  const json = await request.json();
+  const body = generateSchema.parse(json);
 
   return {
     ...body,
+    channelId: (json as Record<string, unknown>).channelId as string | undefined,
     image: null,
   };
 }

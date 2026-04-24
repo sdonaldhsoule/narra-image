@@ -6,7 +6,7 @@ import { serializeGeneration, serializeUser } from "@/lib/prisma-mappers";
 import { getCurrentUserRecord } from "@/lib/server/current-user";
 import { GeneratorStudio } from "@/components/create/generator-studio";
 import { SiteHeader } from "@/components/marketing/site-header";
-import { getBuiltInProviderConfig } from "@/lib/providers/built-in-provider";
+import { getActiveChannels } from "@/lib/providers/built-in-provider";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export default async function CreatePage() {
     redirect("/login");
   }
 
-  const [savedProvider, jobs, builtInConfig, checkInSummary] = await Promise.all([
+  const [savedProvider, jobs, channels, checkInSummary] = await Promise.all([
     db.savedProviderConfig.findUnique({
       where: { userId: user.id },
       select: {
@@ -36,11 +36,18 @@ export default async function CreatePage() {
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
-    getBuiltInProviderConfig(),
+    getActiveChannels(),
     getCheckInSummary(user.id),
   ]);
 
   const currentUser = serializeUser(user);
+  const serializedChannels = channels.map((ch) => ({
+    creditCost: ch.creditCost,
+    defaultModel: ch.defaultModel,
+    id: ch.id,
+    models: ch.models,
+    name: ch.name,
+  }));
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-[var(--surface)]">
@@ -52,8 +59,7 @@ export default async function CreatePage() {
           currentUser={currentUser}
           initialGenerations={jobs.map(serializeGeneration)}
           initialSavedProvider={savedProvider}
-          builtInModels={builtInConfig.models || []}
-          builtInDefaultModel={builtInConfig.model}
+          channels={serializedChannels}
         />
       </section>
     </main>
