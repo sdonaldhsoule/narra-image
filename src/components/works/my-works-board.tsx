@@ -49,18 +49,18 @@ export function MyWorksBoard({ works }: { works: SerializedWork[] }) {
 
   return (
     <>
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {works.map((work) => (
-          <article key={work.id} className="studio-card flex flex-col rounded-[2rem] p-5">
+          <article key={work.id} className="studio-card flex flex-col rounded-[1.6rem] p-4">
             <button
               type="button"
               onClick={() => setZoomedWork(work)}
-              className="group relative overflow-hidden rounded-[1.6rem] border border-[var(--line)] bg-[var(--surface-strong)]/40"
+              className="group relative overflow-hidden rounded-[1.25rem] border border-[var(--line)] bg-[var(--surface-strong)]/40"
             >
               <img
                 src={work.url}
                 alt="作品预览"
-                className="aspect-[4/5] w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                className="aspect-[3/4] w-full object-cover transition duration-500 group-hover:scale-[1.03]"
               />
               <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/20" />
               <span className="absolute right-3 top-3 rounded-full bg-black/55 p-2 text-white opacity-0 transition group-hover:opacity-100">
@@ -68,47 +68,47 @@ export function MyWorksBoard({ works }: { works: SerializedWork[] }) {
               </span>
             </button>
 
-            <div className="mt-4 flex items-start justify-between gap-3">
+            <div className="mt-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm text-[var(--ink-soft)]">创建于 {formatTime(work.createdAt)}</p>
-                <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-[var(--ink)]">
+                <p className="text-xs text-[var(--ink-soft)]">创建于 {formatTime(work.createdAt)}</p>
+                <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-[var(--ink)]">
                   {work.prompt}
                 </p>
               </div>
               <WorkStatusBadge status={work.showcaseStatus} />
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--ink-soft)]">
-              <span className="rounded-full bg-[var(--surface-strong)] px-3 py-1">{work.model}</span>
-              <span className="rounded-full bg-[var(--surface-strong)] px-3 py-1">{work.size}</span>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--ink-soft)]">
+              <span className="rounded-full bg-[var(--surface-strong)] px-2.5 py-1">{work.model}</span>
+              <span className="rounded-full bg-[var(--surface-strong)] px-2.5 py-1">{work.size}</span>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <Link
                 href={`/works/${work.id}`}
-                className="rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent)]"
+                className="rounded-full bg-[var(--ink)] px-3 py-2 text-xs font-medium text-white transition hover:bg-[var(--accent)]"
               >
                 查看详情
               </Link>
               <button
                 type="button"
                 onClick={() => setPromptWork(work)}
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-4 py-2 text-sm text-[var(--ink)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] px-3 py-2 text-xs text-[var(--ink)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
-                <FileText className="size-4" />
-                完整提示词
+                <FileText className="size-3.5" />
+                提示词
               </button>
               <button
                 type="button"
                 onClick={() => void downloadImage(work.url)}
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-4 py-2 text-sm text-[var(--ink)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] px-3 py-2 text-xs text-[var(--ink)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
-                <Download className="size-4" />
+                <Download className="size-3.5" />
                 下载
               </button>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-3">
               <WorkShowcaseControls work={work} compact />
             </div>
           </article>

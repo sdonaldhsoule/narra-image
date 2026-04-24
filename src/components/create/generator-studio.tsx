@@ -294,13 +294,13 @@ export function GeneratorStudio({
 
   return (
     <section
-      className={`grid gap-6 md:gap-8 items-start ${compact ? "lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]" : "lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]"}`}
+      className={`grid gap-4 md:gap-5 items-start ${compact ? "lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_320px]" : "lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]"}`}
     >
-      <div className="flex min-w-0 flex-col gap-6 md:gap-8">
-        <div className="studio-card noise-overlay relative flex flex-col overflow-hidden rounded-[2rem] p-6 md:p-8">
+      <div className="flex min-w-0 flex-col gap-4 md:gap-5">
+        <div className="studio-card noise-overlay relative flex flex-col overflow-hidden rounded-[1.8rem] p-4 md:p-5">
           <div className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent opacity-50" />
           
-        <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-full bg-[var(--accent)]/10 text-[var(--accent)]">
               <WandSparkles className="size-5" />
@@ -309,7 +309,7 @@ export function GeneratorStudio({
               提示词工作室
             </h2>
           </div>
-          <div className="flex items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--surface-strong)]/50 px-4 py-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface-strong)]/50 px-3 py-2 text-sm">
             <span className="text-[var(--ink-soft)]">剩余积分</span>
             <span className="font-semibold text-[var(--accent)]">{currentUser ? credits : "--"}</span>
             {currentUser ? (
@@ -323,7 +323,7 @@ export function GeneratorStudio({
           </div>
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4">
           <div className="flex rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]/30 p-1">
             <button
               type="button"
@@ -350,7 +350,7 @@ export function GeneratorStudio({
           </div>
 
           {generationType === "image_to_image" ? (
-            <div className="rounded-[1.25rem] border border-[var(--line)] bg-[var(--surface-strong)]/30 p-4">
+            <div className="rounded-[1.15rem] border border-[var(--line)] bg-[var(--surface-strong)]/30 p-3.5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-sm font-medium text-[var(--ink)]">当前参考图</div>
@@ -378,11 +378,11 @@ export function GeneratorStudio({
               </div>
 
               {referenceImage ? (
-                <div className="mt-4 flex items-center gap-3">
+                <div className="mt-3 flex items-center gap-3">
                   <img
                     src={referenceImage.previewUrl}
                     alt="当前参考图"
-                    className="size-20 rounded-2xl border border-[var(--line)] object-cover"
+                    className="size-16 rounded-xl border border-[var(--line)] object-cover"
                   />
                   <button
                     type="button"
@@ -405,7 +405,7 @@ export function GeneratorStudio({
                   ? "描述你希望如何修改这张参考图，例如：保留人物姿态，改成胶片杂志风。"
                   : "描述你想要生成的画面。例如：一位穿银色风衣的亚洲模特站在雨后的城市巷口，胶片颗粒感，杂志封面光影。"
               }
-              className="min-h-[140px] w-full resize-none rounded-[1.25rem] border border-[var(--line)] bg-[var(--surface-strong)]/50 px-5 py-4 text-base placeholder:text-[var(--ink-soft)]/50 outline-none transition-all focus:border-[var(--accent)] focus:bg-[var(--surface-strong)] focus:ring-4 focus:ring-[var(--accent)]/10"
+              className="min-h-[120px] w-full resize-none rounded-[1.1rem] border border-[var(--line)] bg-[var(--surface-strong)]/50 px-4 py-3.5 text-sm placeholder:text-[var(--ink-soft)]/50 outline-none transition-all focus:border-[var(--accent)] focus:bg-[var(--surface-strong)] focus:ring-4 focus:ring-[var(--accent)]/10 md:text-base"
             />
           </div>
 
@@ -415,7 +415,7 @@ export function GeneratorStudio({
                 key={preset}
                 type="button"
                 onClick={() => applyPreset(preset)}
-                className="rounded-full border border-[var(--line)] bg-[var(--surface-strong)]/30 px-4 py-1.5 text-sm text-[var(--ink-soft)] transition-all hover:border-[var(--accent)]/50 hover:bg-[var(--accent)]/10 hover:text-[var(--ink)] active:scale-95"
+                className="rounded-full border border-[var(--line)] bg-[var(--surface-strong)]/30 px-3 py-1.5 text-xs text-[var(--ink-soft)] transition-all hover:border-[var(--accent)]/50 hover:bg-[var(--accent)]/10 hover:text-[var(--ink)] active:scale-95 md:text-sm"
               >
                 {preset}
               </button>
@@ -609,7 +609,7 @@ export function GeneratorStudio({
             type="button"
             onClick={() => startTransition(handleGenerate)}
             disabled={isPending || !prompt.trim() || (generationType === "image_to_image" && !referenceImage)}
-            className="group relative mt-2 flex w-full items-center justify-center gap-2 overflow-hidden rounded-[1.25rem] bg-[var(--ink)] px-6 py-4 text-base font-semibold text-white shadow-lg transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            className="group relative mt-1 flex w-full items-center justify-center gap-2 overflow-hidden rounded-[1.1rem] bg-[var(--ink)] px-5 py-3.5 text-sm font-semibold text-white shadow-lg transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 md:text-base"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent)] to-[var(--accent-soft)] opacity-0 transition-opacity group-hover:opacity-100" />
             <div className="relative z-10 flex items-center gap-2">
@@ -625,8 +625,8 @@ export function GeneratorStudio({
       </div>
       </div>
 
-      <div className="sticky top-6 flex min-w-0 flex-col max-h-[calc(100vh-3rem)]">
-        <div className="studio-card flex flex-col overflow-hidden rounded-[2rem] p-5 h-full">
+      <div className="flex min-w-0 flex-col lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)]">
+        <div className="studio-card flex flex-col overflow-hidden rounded-[1.8rem] p-4 h-full md:p-5">
           <div className="mb-4 flex items-center gap-6 border-b border-[var(--line)] px-2 pb-3">
             <button
               onClick={() => setActiveTab("current")}
@@ -662,18 +662,18 @@ export function GeneratorStudio({
                     </div>
                   </div>
                 )}
-                <div className="flex-1 min-h-[300px]">
+                <div className="flex-1 min-h-[220px]">
                   {gallery.length > 0 ? (
-                    <div className={`grid gap-4 h-full ${gallery.length > 1 ? "sm:grid-cols-2" : ""}`}>
+                    <div className={`grid gap-3 h-full ${gallery.length > 1 ? "sm:grid-cols-2" : ""}`}>
                       {gallery.map((image) => (
                         <div
                           key={image.id}
-                          className="group relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)]/50"
+                          className="group relative overflow-hidden rounded-[1.2rem] border border-[var(--line)] bg-[var(--surface-strong)]/50"
                         >
                           <img
                             src={image.url}
                             alt="生成结果"
-                            className="aspect-[4/5] h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            className="aspect-[3/4] h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                           />
                           <div className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-300 group-hover:opacity-100 flex items-center justify-center gap-3">
                             <button 
@@ -720,7 +720,7 @@ export function GeneratorStudio({
             )}
 
             {activeTab === "history" && (
-              <div className="grid grid-cols-2 gap-3 pb-2">
+              <div className="grid grid-cols-3 gap-2 pb-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-3">
                 {generations.length > 0 ? (
                   generations.map((generation) => (
                     <button
