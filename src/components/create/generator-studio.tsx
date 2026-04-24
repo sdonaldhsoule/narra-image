@@ -432,48 +432,52 @@ export function GeneratorStudio({
                     </div>
                     
                     {generation.images.length > 0 ? (
-                      <div className={`grid gap-3 ${generation.images.length > 1 ? "grid-cols-2 sm:grid-cols-2 md:grid-cols-3" : "grid-cols-1 sm:max-w-md"}`}>
-                        {generation.images.map((image) => (
-                          <div
-                            key={image.id}
-                            className="group relative overflow-hidden rounded-[1.2rem] border border-[var(--line)] bg-[var(--surface-strong)]/50 shadow-sm transition-all hover:shadow-md"
-                          >
-                            <img
-                              src={image.url}
-                              alt="生成结果"
-                              className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                            {/* Hover 遮罩与操作 */}
-                            <div className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-300 group-hover:opacity-100 flex items-center justify-center gap-3 backdrop-blur-[2px]">
-                              <button 
-                                type="button"
+                      <div className="space-y-3">
+                        <p className="text-xs text-[var(--ink-soft)]">结果 {generation.images.length}</p>
+                        <div className={`grid gap-3 ${generation.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`} style={{ maxWidth: generation.images.length === 1 ? "280px" : "400px" }}>
+                          {generation.images.map((image) => (
+                            <div
+                              key={image.id}
+                              className="group relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)]/50 shadow-sm"
+                            >
+                              <img
+                                src={image.url}
+                                alt="生成结果"
+                                className="w-full h-auto object-cover cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
                                 onClick={() => setZoomedImage(image.url)}
-                                className="rounded-full bg-white/20 p-2.5 text-white backdrop-blur-md transition hover:bg-white/40 hover:scale-110"
-                                title="放大查看"
-                              >
-                                <ZoomIn className="size-4" />
-                              </button>
-                              <button 
-                                type="button"
-                                onClick={() => handleDownload(image.url)}
-                                className="rounded-full bg-white/20 p-2.5 text-white backdrop-blur-md transition hover:bg-white/40 hover:scale-110"
-                                title="下载保存"
-                              >
-                                <Download className="size-4" />
-                              </button>
+                              />
+                              {/* 底部操作栏 — 始终可见 */}
+                              <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-[var(--line)]/50 bg-[var(--surface)]/80">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleUseImageForEdit(image.url)}
+                                  className="flex items-center gap-1.5 rounded-full bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-medium text-[var(--ink)] border border-[var(--line)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                                >
+                                  <ImagePlus className="size-3" />
+                                  加入编辑
+                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setZoomedImage(image.url)}
+                                    className="rounded-lg p-1.5 text-[var(--ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--ink)]"
+                                    title="放大查看"
+                                  >
+                                    <ZoomIn className="size-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDownload(image.url)}
+                                    className="rounded-lg p-1.5 text-[var(--ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--ink)]"
+                                    title="下载保存"
+                                  >
+                                    <Download className="size-3.5" />
+                                  </button>
+                                </div>
+                              </div>
                             </div>
-                            <div className="absolute inset-x-3 bottom-3 flex justify-end opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                              <button
-                                type="button"
-                                onClick={() => void handleUseImageForEdit(image.url)}
-                                className="flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-black shadow-lg transition hover:bg-[var(--accent)] hover:text-white"
-                              >
-                                <ImagePlus className="size-3.5" />
-                                加入编辑
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     ) : (
                       <div className="rounded-2xl rounded-tl-none border border-rose-500/20 bg-rose-500/10 px-5 py-3.5 text-sm text-rose-400">
