@@ -82,6 +82,20 @@ model CheckInRecord {
   @@unique([userId, dateKey])
 }
 
+/// @deprecated — 旧表保留避免 prisma db push 数据丢失，新逻辑已迁移至 ProviderChannel
+model BuiltInProviderConfig {
+  id              String   @id @default(cuid())
+  scope           String   @unique @default("default")
+  name            String
+  baseUrl         String
+  apiKeyEncrypted String
+  model           String
+  models          String[] @default([])
+  creditCost      Int      @default(5)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model ProviderChannel {
   id              String   @id @default(cuid())
   name            String
