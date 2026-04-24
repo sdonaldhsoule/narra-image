@@ -19,6 +19,15 @@ export type LinuxDoUser = {
   silenced: boolean;
 };
 
+const oauthUserSelect = {
+  avatarUrl: true,
+  credits: true,
+  email: true,
+  id: true,
+  nickname: true,
+  role: true,
+} as const;
+
 export function buildLinuxDoAuthorizeUrl(clientId: string, redirectUri: string, state: string) {
   const params = new URLSearchParams({
     client_id: clientId,
@@ -86,35 +95,30 @@ function buildAvatarUrl(avatarUrl: string): string {
 }
 
 export async function findOrCreateOAuthUser(ldUser: LinuxDoUser) {
+  const oauthId = String(ldUser.id);
+  const avatarUrl = ldUser.avatar_url ? buildAvatarUrl(ldUser.avatar_url) : null;
+
   // 先查找已有 OAuth 绑定
-  const existingOAuth = await db.user.findUnique({
+  const existingOAuth = await db.user.findFirst({
     where: {
-      oauthProvider_oauthId: {
-        oauthProvider: "linuxdo",
-        oauthId: String(ldUser.id),
-      },
+      oauthProvider: "linuxdo",
+      oauthId,
     },
-    select: {
-      avatarUrl: true,
-      credits: true,
-      email: true,
-      id: true,
-      nickname: true,
-      role: true,
-    },
+    // 兼容历史脏数据：如果线上已经存在重复绑定，优先取最早的一条。
+    orderBy: { createdAt: "asc" },
+    select: oauthUserSelect,
   });
 
   if (existingOAuth) {
     // 更新昵称和头像（如果用户在 LinuxDo 更新了）
-    await db.user.update({
+    return db.user.update({
       where: { id: existingOAuth.id },
       data: {
         ...(ldUser.name && !existingOAuth.nickname ? { nickname: ldUser.name } : {}),
-        ...(ldUser.avatar_url ? { avatarUrl: buildAvatarUrl(ldUser.avatar_url) } : {}),
+        ...(avatarUrl ? { avatarUrl } : {}),
       },
+      select: oauthUserSelect,
     });
-
-    return existingOAuth;
   }
 
   // 使用 linuxdo 用户名生成一个占位邮箱
@@ -132,17 +136,10 @@ export async function findOrCreateOAuthUser(ldUser: LinuxDoUser) {
       where: { id: existingEmail.id },
       data: {
         oauthProvider: "linuxdo",
-        oauthId: String(ldUser.id),
-        ...(ldUser.avatar_url ? { avatarUrl: buildAvatarUrl(ldUser.avatar_url) } : {}),
+        oauthId,
+        ...(avatarUrl ? { avatarUrl } : {}),
       },
-      select: {
-        avatarUrl: true,
-        credits: true,
-        email: true,
-        id: true,
-        nickname: true,
-        role: true,
-      },
+      select: oauthUserSelect,
     });
     return updated;
   }
@@ -150,21 +147,14 @@ export async function findOrCreateOAuthUser(ldUser: LinuxDoUser) {
   // 创建新用户
   const newUser = await db.user.create({
     data: {
-      avatarUrl: ldUser.avatar_url ? buildAvatarUrl(ldUser.avatar_url) : null,
+      avatarUrl,
       credits: DEFAULT_INITIAL_CREDITS,
       email,
       nickname: ldUser.name || ldUser.username,
-      oauthId: String(ldUser.id),
+      oauthId,
       oauthProvider: "linuxdo",
     },
-    select: {
-      avatarUrl: true,
-      credits: true,
-      email: true,
-      id: true,
-      nickname: true,
-      role: true,
-    },
+    select: oauthUserSelect,
   });
 
   return newUser;

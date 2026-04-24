@@ -55,7 +55,7 @@ model User {
   featuredGenerations  GenerationJob[]       @relation("FeaturedByAdmin")
   reviewedWorks        GenerationImage[]     @relation("ReviewedWorks")
 
-  @@unique([oauthProvider, oauthId])
+  @@index([oauthProvider, oauthId])
 }
 
 model InviteBatch {
