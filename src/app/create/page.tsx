@@ -34,7 +34,7 @@ export default async function CreatePage() {
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 24,
+      take: 50,
     }),
     getBuiltInProviderConfig(),
     getCheckInSummary(user.id),
@@ -43,19 +43,10 @@ export default async function CreatePage() {
   const currentUser = serializeUser(user);
 
   return (
-    <main className="pb-20">
+    <main className="flex h-screen flex-col overflow-hidden bg-[var(--surface)]">
       <SiteHeader currentUser={currentUser} showCheckIn={false} />
 
-      <section className="mx-auto max-w-[1120px] px-5 pb-12 pt-8 md:px-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-semibold tracking-tight text-[var(--ink)] md:text-4xl">
-            创作控制台
-          </h1>
-          <p className="mt-2 text-sm text-[var(--ink-soft)]">
-            持续迭代你的提示词，或者切换到自定义的 API 渠道。
-          </p>
-        </div>
-
+      <section className="relative flex flex-1 flex-col overflow-hidden">
         <GeneratorStudio
           checkInSummary={checkInSummary}
           currentUser={currentUser}
