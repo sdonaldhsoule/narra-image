@@ -1,6 +1,9 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Copy, X } from "lucide-react";
+import { useState } from "react";
+
+import { buildPromptClipboardText } from "@/lib/prompt-preview";
 
 type PromptModalProps = {
   negativePrompt?: string | null;
@@ -13,6 +16,19 @@ export function PromptModal({
   onClose,
   prompt,
 }: PromptModalProps) {
+  const [copyFeedback, setCopyFeedback] = useState("");
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(
+        buildPromptClipboardText(prompt, negativePrompt),
+      );
+      setCopyFeedback("提示词已复制");
+    } catch {
+      setCopyFeedback("复制失败，请手动复制");
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
@@ -30,7 +46,22 @@ export function PromptModal({
         >
           <X className="size-6" />
         </button>
-        <h3 className="text-xl font-semibold text-[var(--ink)]">完整提示词</h3>
+        <div className="flex items-start justify-between gap-4 pr-10">
+          <div>
+            <h3 className="text-xl font-semibold text-[var(--ink)]">完整提示词</h3>
+            {copyFeedback ? (
+              <p className="mt-2 text-sm text-[var(--accent)]">{copyFeedback}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleCopy()}
+            className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--line)] px-4 py-2 text-sm text-[var(--ink)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          >
+            <Copy className="size-4" />
+            复制提示词
+          </button>
+        </div>
         <p className="mt-5 whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)] md:text-base">
           {prompt}
         </p>

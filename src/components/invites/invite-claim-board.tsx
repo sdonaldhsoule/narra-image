@@ -16,7 +16,7 @@ export function InviteClaimBoard({
   batches: InviteClaimBatch[];
 }) {
   return (
-    <div className="grid gap-5 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-2">
       {batches.map((batch) => (
         <InviteClaimCard key={batch.id} batch={batch} />
       ))}
@@ -57,18 +57,18 @@ function InviteClaimCard({
   }
 
   return (
-    <article className="studio-card rounded-[2rem] p-5">
+    <article className="studio-card rounded-[1.6rem] p-4 md:p-5">
       <p className="text-xs uppercase tracking-[0.3em] text-[var(--ink-soft)]">
         Public Claim
       </p>
-      <h2 className="mt-3 text-2xl font-semibold text-[var(--ink)]">
+      <h2 className="mt-2.5 text-xl font-semibold text-[var(--ink)] md:text-2xl">
         {batch.title || "未命名邀请码批次"}
       </h2>
-      <p className="mt-3 text-sm leading-7 text-[var(--ink-soft)]">
+      <p className="mt-3 text-sm leading-6 text-[var(--ink-soft)]">
         公开页不会直接展示邀请码明文，点击领取后系统会分配一个可注册的邀请码。
       </p>
 
-      <div className="mt-5 flex items-center gap-3 text-sm text-[var(--ink-soft)]">
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-[var(--ink-soft)]">
         <span className="rounded-full bg-[var(--surface-strong)] px-3 py-1">
           总量 {batch.totalCount}
         </span>
@@ -81,7 +81,7 @@ function InviteClaimCard({
         type="button"
         disabled={isPending || batch.remainingCount <= 0}
         onClick={() => startTransition(handleClaim)}
-        className="mt-6 rounded-full bg-[var(--ink)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent)] disabled:opacity-60"
+        className="mt-5 w-full rounded-full bg-[var(--ink)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent)] disabled:opacity-60 sm:w-auto"
       >
         {isPending ? "领取中..." : batch.remainingCount > 0 ? "领取邀请码" : "已领完"}
       </button>

@@ -46,14 +46,14 @@ export function InviteCreator() {
       <p className="mt-1 text-sm text-[var(--ink-soft)]">
         建议为每个邀请码写备注，并可批量生成多个。
       </p>
-      <div className="mt-4 flex flex-col gap-3 md:flex-row">
+      <div className="mt-4 flex flex-col gap-3">
         <input
           value={note}
           onChange={(event) => setNote(event.target.value)}
           placeholder="备注，例如：首批设计师"
           className="flex-1 rounded-2xl border border-[var(--line)] bg-white/70 px-4 py-3 outline-none transition-all focus:border-[var(--accent)]"
         />
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <label className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] bg-white/70 px-4 py-3 text-sm text-[var(--ink-soft)]">
             <input
               type="checkbox"

@@ -55,7 +55,7 @@ export default async function AdminInvitesPage() {
   return (
     <main className="pb-16">
       <SiteHeader currentUser={serializeUser(admin)} />
-      <section className="mx-auto grid max-w-7xl gap-6 px-5 pt-6 md:px-8">
+      <section className="mx-auto grid max-w-7xl gap-5 px-5 pt-6 md:px-8">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-[var(--ink)] md:text-4xl">
@@ -71,8 +71,8 @@ export default async function AdminInvitesPage() {
         <InviteCreator />
 
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <section className="studio-card rounded-[2rem] p-5">
-            <div className="flex items-end justify-between gap-4">
+          <section className="studio-card rounded-[1.6rem] p-4 md:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h2 className="text-xl font-medium">公开领取入口</h2>
                 <p className="mt-2 text-sm text-[var(--ink-soft)]">
@@ -88,7 +88,7 @@ export default async function AdminInvitesPage() {
             </div>
           </section>
 
-          <section className="studio-card rounded-[2rem] p-5">
+          <section className="studio-card rounded-[1.6rem] p-4 md:p-5">
             <h2 className="text-xl font-medium">批次概览</h2>
             <p className="mt-2 text-sm text-[var(--ink-soft)]">
               每次批量生成都会形成一个可独立开放的领取批次。
@@ -102,7 +102,7 @@ export default async function AdminInvitesPage() {
             return (
               <article
                 key={batch.id}
-                className="studio-card grid gap-4 rounded-[1.8rem] p-5 xl:grid-cols-[1.2fr_0.8fr_0.8fr_auto]"
+                className="studio-card grid gap-4 rounded-[1.6rem] p-4 md:p-5 xl:grid-cols-[1.2fr_0.8fr_0.8fr_auto]"
               >
                 <div>
                   <div className="text-xs uppercase tracking-[0.28em] text-[var(--ink-soft)]">
@@ -133,7 +133,36 @@ export default async function AdminInvitesPage() {
           })}
         </div>
 
-        <div className="studio-card overflow-hidden rounded-[2rem]">
+        <div className="grid gap-3 lg:hidden">
+          {invites.map((invite) => (
+            <article key={invite.id} className="studio-card rounded-[1.4rem] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-[var(--ink)] break-all">{invite.code}</div>
+                  <div className="mt-1 text-xs text-[var(--ink-soft)]">
+                    {invite.batch?.title || "独立邀请码"}
+                  </div>
+                </div>
+                <div className="shrink-0">
+                  {invite.usedAt ? (
+                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-white">已使用</span>
+                  ) : invite.claimedAt ? (
+                    <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-700">已发放</span>
+                  ) : (
+                    <span className="rounded-full border border-[var(--line)] px-3 py-1 text-xs text-[var(--ink-soft)]">未使用</span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 text-sm text-[var(--ink-soft)]">
+                <p>备注：{invite.note || "—"}</p>
+                <p>领取状态：{invite.batch ? (invite.batch.isPublic ? "批次已开放" : "批次未开放") : "独立邀请码"}</p>
+                <p>使用用户：{invite.usedBy?.email || "—"}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="studio-card hidden overflow-hidden rounded-[2rem] lg:block">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-[var(--line)] bg-white/60 text-[var(--ink-soft)]">
               <tr>

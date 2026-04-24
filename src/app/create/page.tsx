@@ -46,7 +46,7 @@ export default async function CreatePage() {
     <main className="pb-20">
       <SiteHeader currentUser={currentUser} showCheckIn={false} />
 
-      <section className="mx-auto max-w-6xl px-5 pt-8 pb-12 md:px-8">
+      <section className="mx-auto max-w-[1120px] px-5 pb-12 pt-8 md:px-8">
         <div className="mb-6">
           <h1 className="text-3xl font-semibold tracking-tight text-[var(--ink)] md:text-4xl">
             创作控制台

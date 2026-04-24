@@ -26,7 +26,7 @@ export default async function WorksPage() {
     <main className="pb-20">
       <SiteHeader currentUser={currentUser} />
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-5 pb-12 pt-8 md:px-8">
+      <section className="mx-auto grid max-w-7xl gap-5 px-5 pb-12 pt-8 md:px-8">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-[var(--ink)] md:text-4xl">
@@ -37,15 +37,15 @@ export default async function WorksPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="grid grid-cols-3 gap-2 text-center sm:gap-3">
             {[
               ["全部作品", counts.total],
               ["待审核", counts.pending],
               ["已公开", counts.featured],
             ].map(([label, value]) => (
-              <div key={label} className="studio-card min-w-28 rounded-[1.4rem] px-4 py-4">
+              <div key={label} className="studio-card min-w-24 rounded-[1.2rem] px-3 py-3">
                 <p className="text-xs text-[var(--ink-soft)]">{label}</p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--ink)]">{value}</p>
+                <p className="mt-1.5 text-xl font-semibold text-[var(--ink)] md:text-2xl">{value}</p>
               </div>
             ))}
           </div>
