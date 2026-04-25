@@ -11,6 +11,15 @@
   --accent-soft: #f1b99a;
   --line: rgba(47, 30, 16, 0.12);
   --shadow: 0 22px 70px rgba(94, 58, 33, 0.12);
+  --font-bricolage:
+    "Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Noto Sans SC", sans-serif;
+  --font-cormorant:
+    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Songti SC",
+    "Noto Serif SC", serif;
+  --font-mono:
+    "JetBrains Mono", "SFMono-Regular", "Cascadia Code", "Consolas",
+    "Liberation Mono", monospace;
 }
 
 @theme {
