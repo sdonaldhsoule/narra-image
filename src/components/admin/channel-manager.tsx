@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, X, ToggleLeft, ToggleRight, GripVertical, Zap, Globe, Key, Server } from "lucide-react";
+import { Plus, Pencil, Trash2, X, ToggleLeft, ToggleRight, Zap, Globe, Key, Server } from "lucide-react";
 
 type ChannelItem = {
   apiKeyConfigured: boolean;
@@ -37,6 +37,8 @@ export function ChannelManager({ initialChannels }: ChannelManagerProps) {
   const [formApiKey, setFormApiKey] = useState("");
   const [formDefaultModel, setFormDefaultModel] = useState("");
   const [formModels, setFormModels] = useState<string[]>([]);
+  // 拉取到的所有模型（包含非生图），管理员可在其中勾选实际启用的模型
+  const [fetchedModels, setFetchedModels] = useState<Array<{ id: string; imageLikely: boolean }>>([]);
   const [formCreditCost, setFormCreditCost] = useState(5);
   const [formIsActive, setFormIsActive] = useState(true);
   const [formSortOrder, setFormSortOrder] = useState(0);
@@ -48,6 +50,7 @@ export function ChannelManager({ initialChannels }: ChannelManagerProps) {
     setFormApiKey("");
     setFormDefaultModel("");
     setFormModels([]);
+    setFetchedModels([]);
     setFormCreditCost(5);
     setFormIsActive(true);
     setFormSortOrder(0);
@@ -69,6 +72,8 @@ export function ChannelManager({ initialChannels }: ChannelManagerProps) {
     setFormApiKey("");
     setFormDefaultModel(ch.defaultModel);
     setFormModels(ch.models);
+    // 老数据没有 imageLikely 标记，先按已启用来展示，后续重新拉取再覆盖
+    setFetchedModels(ch.models.map((id) => ({ id, imageLikely: true })));
     setFormCreditCost(ch.creditCost);
     setFormIsActive(ch.isActive);
     setFormSortOrder(ch.sortOrder);
@@ -193,8 +198,45 @@ export function ChannelManager({ initialChannels }: ChannelManagerProps) {
       return;
     }
     const models = result.data?.models ?? [];
-    setFormModels(models.map((m) => m.id));
-    if (models[0]?.id) setFormDefaultModel(models[0].id);
+    setFetchedModels(models);
+    // 默认只勾选生图模型
+    const imageModels = models.filter((m) => m.imageLikely).map((m) => m.id);
+    setFormModels(imageModels);
+    if (imageModels[0]) {
+      setFormDefaultModel(imageModels[0]);
+    } else if (models[0]?.id) {
+      setFormDefaultModel(models[0].id);
+    }
+  }
+
+  function toggleModel(id: string) {
+    setFormModels((prev) => {
+      if (prev.includes(id)) {
+        const next = prev.filter((m) => m !== id);
+        if (formDefaultModel === id) {
+          setFormDefaultModel(next[0] ?? "");
+        }
+        return next;
+      }
+      return [...prev, id];
+    });
+  }
+
+  function selectAllModels() {
+    setFormModels(fetchedModels.map((m) => m.id));
+  }
+
+  function selectImageModelsOnly() {
+    const ids = fetchedModels.filter((m) => m.imageLikely).map((m) => m.id);
+    setFormModels(ids);
+    if (!ids.includes(formDefaultModel)) {
+      setFormDefaultModel(ids[0] ?? "");
+    }
+  }
+
+  function clearAllModels() {
+    setFormModels([]);
+    setFormDefaultModel("");
   }
 
   return (
@@ -221,7 +263,7 @@ export function ChannelManager({ initialChannels }: ChannelManagerProps) {
         <div className="rounded-2xl border-2 border-dashed border-[var(--line)] p-12 text-center">
           <Server className="mx-auto size-10 text-[var(--ink-soft)] opacity-40" />
           <p className="mt-4 text-sm text-[var(--ink-soft)]">
-            尚未配置任何渠道。点击"新增渠道"开始配置你的第一个 API 提供商。
+            尚未配置任何渠道。点击「新增渠道」开始配置你的第一个 API 提供商。
           </p>
         </div>
       ) : (
@@ -410,24 +452,84 @@ export function ChannelManager({ initialChannels }: ChannelManagerProps) {
               </label>
 
 
-              {formModels.length > 0 && (
+              {fetchedModels.length > 0 && (
                 <div className="md:col-span-2">
-                  <span className="text-sm text-[var(--ink-soft)] mb-2 block">可用模型（点击选为默认）</span>
-                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-                    {formModels.map((m) => (
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm text-[var(--ink-soft)]">
+                      模型管理（已启用 {formModels.length} / 共拉取 {fetchedModels.length}）
+                    </span>
+                    <div className="flex items-center gap-2 text-xs">
                       <button
-                        key={m}
                         type="button"
-                        onClick={() => setFormDefaultModel(m)}
-                        className={`rounded-full px-3 py-1 text-xs transition ${
-                          formDefaultModel === m
-                            ? "bg-[var(--ink)] text-white"
-                            : "border border-[var(--line)] text-[var(--ink-soft)] hover:border-[var(--accent)]"
-                        }`}
+                        onClick={selectImageModelsOnly}
+                        className="text-[var(--accent)] hover:underline"
                       >
-                        {m}
+                        仅生图
                       </button>
-                    ))}
+                      <span className="text-[var(--ink-soft)]/50">·</span>
+                      <button
+                        type="button"
+                        onClick={selectAllModels}
+                        className="text-[var(--accent)] hover:underline"
+                      >
+                        全选
+                      </button>
+                      <span className="text-[var(--ink-soft)]/50">·</span>
+                      <button
+                        type="button"
+                        onClick={clearAllModels}
+                        className="text-[var(--accent)] hover:underline"
+                      >
+                        全不选
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[var(--ink-soft)] mb-2">
+                    勾选的模型会出现在创作台供用户选择；点击模型名将其设为默认（自动勾选）。
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-56 overflow-y-auto rounded-xl border border-[var(--line)] p-2">
+                    {fetchedModels.map((m) => {
+                      const checked = formModels.includes(m.id);
+                      const isDefault = formDefaultModel === m.id && checked;
+                      return (
+                        <label
+                          key={m.id}
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition ${
+                            isDefault ? "bg-[var(--ink)]/5 ring-1 ring-[var(--ink)]/20" : "hover:bg-[var(--surface-strong)]"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleModel(m.id)}
+                            className="rounded border-[var(--line)] text-[var(--accent)] focus:ring-[var(--accent)]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!checked) toggleModel(m.id);
+                              setFormDefaultModel(m.id);
+                            }}
+                            className="flex-1 min-w-0 truncate text-left text-xs"
+                            title={m.id}
+                          >
+                            <span className={`font-mono ${checked ? "text-[var(--ink)]" : "text-[var(--ink-soft)]"}`}>
+                              {m.id}
+                            </span>
+                            {m.imageLikely && (
+                              <span className="ml-1.5 inline-block rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600">
+                                生图
+                              </span>
+                            )}
+                            {isDefault && (
+                              <span className="ml-1.5 inline-block rounded-full bg-[var(--ink)] px-1.5 py-0.5 text-[9px] font-medium text-white">
+                                默认
+                              </span>
+                            )}
+                          </button>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
               )}
