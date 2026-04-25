@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { serializeUser } from "@/lib/prisma-mappers";
 import { getCurrentUserRecord } from "@/lib/server/current-user";
-import { listFeaturedWorks } from "@/lib/server/works";
+import { listFeaturedWorksPage } from "@/lib/server/works";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { FeaturedGallery } from "@/components/marketing/featured-gallery";
 
@@ -11,7 +11,12 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const user = await getCurrentUserRecord();
   const currentUser = user ? serializeUser(user) : null;
-  const works = await listFeaturedWorks().catch(() => []);
+  const featuredPage = await listFeaturedWorksPage({ limit: 24 }).catch(() => ({
+    hasMore: false,
+    items: [],
+    nextCursor: null,
+  }));
+  const works = featuredPage.items;
 
   return (
     <main className="pb-20">
@@ -36,7 +41,11 @@ export default async function Home() {
         </div>
 
         {works.length > 0 ? (
-          <FeaturedGallery works={works} />
+          <FeaturedGallery
+            initialHasMore={featuredPage.hasMore}
+            initialNextCursor={featuredPage.nextCursor}
+            works={works}
+          />
         ) : (
           <div className="studio-card rounded-[2rem] border border-dashed border-[var(--line)] p-10 text-center">
             <h2 className="text-2xl font-semibold text-[var(--ink)]">精选作品还在审核中</h2>

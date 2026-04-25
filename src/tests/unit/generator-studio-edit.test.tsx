@@ -15,12 +15,31 @@ Object.defineProperty(URL, "createObjectURL", {
   value: vi.fn(() => "blob:preview"),
 });
 
+function mockLocalStorage() {
+  const store = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    clear: vi.fn(() => store.clear()),
+    getItem: vi.fn((key: string) => store.get(key) ?? null),
+    removeItem: vi.fn((key: string) => {
+      store.delete(key);
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      store.set(key, value);
+    }),
+  });
+}
+
 describe("创作台连续编辑", () => {
+  beforeEach(() => {
+    mockLocalStorage();
+  });
+
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
         blob: async () => new Blob(["fake-image"], { type: "image/png" }),
+        ok: true,
       })),
     );
   });
@@ -108,7 +127,8 @@ describe("创作台连续编辑", () => {
 
     await user.click(screen.getByRole("button", { name: "加入编辑" }));
 
-    expect(screen.getByRole("button", { name: "图生图" })).toHaveClass("bg-[var(--card)]");
-    expect(screen.getByText("当前参考图")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "图生图" })).toHaveClass("bg-white", "text-black", "shadow-sm");
+    expect(screen.getByPlaceholderText("描述你希望如何修改这张参考图...")).toBeInTheDocument();
+    expect(screen.getByAltText("Reference")).toBeInTheDocument();
   });
 });

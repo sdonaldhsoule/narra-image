@@ -10,6 +10,9 @@ import {
   type FeaturedWorkRecord,
 } from "@/lib/prisma-mappers";
 
+const FEATURED_WORKS_PAGE_SIZE = 24;
+const FEATURED_WORKS_MAX = 100;
+
 const workBaseInclude = Prisma.validator<Prisma.GenerationImageInclude>()({
   job: {
     select: {
@@ -82,9 +85,76 @@ export async function listUserWorks(userId: string, take = 60) {
 }
 
 export async function listFeaturedWorks(take = 6) {
+  const page = await listFeaturedWorksPage({ limit: take });
+  return page.items;
+}
+
+type FeaturedWorksCursor = {
+  featuredAt: string;
+  id: string;
+};
+
+type ListFeaturedWorksPageOptions = {
+  cursor?: string | null;
+  limit?: number;
+};
+
+export type FeaturedWorksPage = {
+  hasMore: boolean;
+  items: ReturnType<typeof serializeFeaturedWork>[];
+  nextCursor: string | null;
+};
+
+function encodeFeaturedWorksCursor(cursor: FeaturedWorksCursor) {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeFeaturedWorksCursor(cursor?: string | null) {
+  if (!cursor) {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Partial<FeaturedWorksCursor>;
+    if (typeof decoded.featuredAt !== "string" || typeof decoded.id !== "string") {
+      return null;
+    }
+    return decoded as FeaturedWorksCursor;
+  } catch {
+    return null;
+  }
+}
+
+function isAfterCursor(record: { featuredAt: Date | null; id: string }, cursor: FeaturedWorksCursor) {
+  if (!record.featuredAt) {
+    return false;
+  }
+
+  const recordFeaturedAt = record.featuredAt.toISOString();
+  if (recordFeaturedAt < cursor.featuredAt) {
+    return true;
+  }
+  if (recordFeaturedAt > cursor.featuredAt) {
+    return false;
+  }
+  return record.id < cursor.id;
+}
+
+export async function listFeaturedWorksPage(
+  options: ListFeaturedWorksPageOptions = {},
+): Promise<FeaturedWorksPage> {
+  const limit = Math.min(
+    Math.max(options.limit ?? FEATURED_WORKS_PAGE_SIZE, 1),
+    FEATURED_WORKS_PAGE_SIZE,
+  );
+  const cursor = decodeFeaturedWorksCursor(options.cursor);
+
   const works = await db.generationImage.findMany({
     where: {
       showcaseStatus: ShowcaseStatus.FEATURED,
+      featuredAt: {
+        not: null,
+      },
     },
     include: {
       ...workBaseInclude,
@@ -108,13 +178,35 @@ export async function listFeaturedWorks(take = 6) {
         },
       },
     },
-    orderBy: {
-      featuredAt: "desc",
-    },
-    take,
+    orderBy: [
+      {
+        featuredAt: "desc",
+      },
+      {
+        id: "desc",
+      },
+    ],
+    take: FEATURED_WORKS_MAX,
   });
 
-  return works.map((w) => serializeFeaturedWork(w as unknown as FeaturedWorkRecord));
+  const visibleWorks = cursor
+    ? works.filter((work) => isAfterCursor(work, cursor))
+    : works;
+  const pageItems = visibleWorks.slice(0, limit);
+  const hasMore = visibleWorks.length > limit;
+  const nextCursor =
+    hasMore && pageItems.length > 0 && pageItems[pageItems.length - 1]?.featuredAt
+      ? encodeFeaturedWorksCursor({
+          featuredAt: pageItems[pageItems.length - 1].featuredAt!.toISOString(),
+          id: pageItems[pageItems.length - 1].id,
+        })
+      : null;
+
+  return {
+    hasMore,
+    items: pageItems.map((w) => serializeFeaturedWork(w as unknown as FeaturedWorkRecord)),
+    nextCursor,
+  };
 }
 
 export async function listAdminWorks(take = 120) {

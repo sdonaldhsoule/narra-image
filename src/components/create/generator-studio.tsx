@@ -1,11 +1,14 @@
 "use client";
 
 import { Sparkles, WandSparkles, Download, ZoomIn, X, ImagePlus, Settings2, Send, Paperclip, SquarePen, PanelLeftClose, PanelLeftOpen, Trash2, MessageSquare } from "lucide-react";
-import { useMemo, useRef, useState, useTransition, useEffect, useCallback } from "react";
+import { useRef, useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-import { CheckInButton } from "@/components/benefits/check-in-button";
-import type { GenerationType } from "@/lib/types";
+import {
+  legacyGenerationSizeMap,
+  type GenerationSizeToken,
+  type GenerationType,
+} from "@/lib/types";
 
 type ViewerUser = {
   credits: number;
@@ -57,6 +60,58 @@ type GeneratorStudioProps = {
   channels?: ChannelInfo[];
 };
 
+type LegacyGenerationSize = keyof typeof legacyGenerationSizeMap;
+
+type SizeOption = {
+  aspectRatio?: string;
+  aliases?: string[];
+  label: string;
+  value: GenerationSizeToken;
+};
+
+const SIZE_OPTIONS: SizeOption[] = [
+  { label: "自动", value: "auto" },
+  { aliases: ["方形", "square"], aspectRatio: "1 / 1", label: "方形 1:1", value: "1:1" },
+  { aliases: ["竖版", "portrait"], aspectRatio: "3 / 4", label: "竖版 3:4", value: "3:4" },
+  { aliases: ["故事", "story"], aspectRatio: "9 / 16", label: "故事 9:16", value: "9:16" },
+  { aliases: ["横屏"], aspectRatio: "4 / 3", label: "横屏 4:3", value: "4:3" },
+  { aliases: ["宽屏", "landscape"], aspectRatio: "16 / 9", label: "宽屏 16:9", value: "16:9" },
+];
+
+const SIZE_OPTION_LOOKUP = new Map(
+  SIZE_OPTIONS.flatMap((option) => [
+    [option.value, option],
+    ...(option.aliases ?? []).map((alias) => [alias, option] as const),
+    ...Object.entries(legacyGenerationSizeMap)
+      .filter(([, value]) => value === option.value)
+      .map(([legacyValue]) => [legacyValue, option] as const),
+  ]),
+);
+
+function getSizeOption(size: string) {
+  const normalized =
+    legacyGenerationSizeMap[size as LegacyGenerationSize] ?? size;
+  return SIZE_OPTION_LOOKUP.get(normalized);
+}
+
+function getSizeLabel(size: string) {
+  return getSizeOption(size)?.label ?? size;
+}
+
+function getAspectRatio(size: string) {
+  const mappedRatio = getSizeOption(size)?.aspectRatio;
+  if (mappedRatio) {
+    return mappedRatio;
+  }
+
+  const match = size.match(/^(\d+)x(\d+)$/);
+  if (!match) {
+    return undefined;
+  }
+
+  return `${Number(match[1])} / ${Number(match[2])}`;
+}
+
 // --- Session helpers ---
 type SessionInfo = {
   id: string;
@@ -81,8 +136,6 @@ function saveSessions(sessions: SessionInfo[]) {
 }
 
 export function GeneratorStudio({
-  compact = false,
-  checkInSummary,
   currentUser,
   initialGenerations = [],
   initialSavedProvider = null,
@@ -106,9 +159,7 @@ export function GeneratorStudio({
   const [availableModels, setAvailableModels] = useState<string[]>(
     initialSavedProvider?.models || []
   );
-  const [size, setSize] = useState<"1024x1024" | "1024x1536" | "1536x1024">(
-    "1024x1024",
-  );
+  const [size, setSize] = useState<GenerationSizeToken>("auto");
   const [count, setCount] = useState(1);
   const [providerMode, setProviderMode] = useState<"built_in" | "custom">(
     "built_in",
@@ -118,8 +169,6 @@ export function GeneratorStudio({
   );
   const [customApiKey, setCustomApiKey] = useState("");
   const [rememberProvider, setRememberProvider] = useState(false);
-  const [allGenerations] = useState(initialGenerations);
-  const [credits, setCredits] = useState(currentUser?.credits ?? 0);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [referenceImage, setReferenceImage] = useState<{
     file: File;
@@ -136,40 +185,40 @@ export function GeneratorStudio({
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Initialize sessions from localStorage and backfill legacy generations
+  // Initialize sessions from localStorage and backfill legacy generations.
   useEffect(() => {
     let stored = loadSessions();
-    const knownIds = new Set(stored.flatMap((s) => s.generationIds));
-    const orphans = initialGenerations.filter((g) => !knownIds.has(g.id));
+    const knownIds = new Set(stored.flatMap((session) => session.generationIds));
+    const orphans = initialGenerations.filter((generation) => !knownIds.has(generation.id));
 
     if (orphans.length > 0 && stored.length === 0) {
-      // First time — create a session for legacy data
       const legacy: SessionInfo = {
         id: genSessionId(),
         title: orphans[0]?.prompt?.slice(0, 30) || "历史会话",
-        generationIds: orphans.map((g) => g.id),
+        generationIds: orphans.map((generation) => generation.id),
         createdAt: orphans[0]?.createdAt || new Date().toISOString(),
       };
       stored = [legacy];
       saveSessions(stored);
     }
 
+    // 这里只在挂载后同步一次本地会话缓存，避免改动现有会话恢复行为。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSessions(stored);
-    // Set active session to the last one, or create a new one
     if (stored.length > 0) {
       const last = stored[stored.length - 1];
       setActiveSessionId(last.id);
       setSessionGenerations(
-        initialGenerations.filter((g) => last.generationIds.includes(g.id))
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        initialGenerations
+          .filter((generation) => last.generationIds.includes(generation.id))
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
       );
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialGenerations]);
 
   // Auto-scroll to bottom when generations change
   useEffect(() => {
-    if (scrollAreaRef.current) {
+    if (scrollAreaRef.current && typeof scrollAreaRef.current.scrollTo === "function") {
       scrollAreaRef.current.scrollTo({
         top: scrollAreaRef.current.scrollHeight,
         behavior: "smooth",
@@ -207,15 +256,6 @@ export function GeneratorStudio({
     }
   }
 
-  const sizeOptions = useMemo(
-    () => [
-      { label: "方形", value: "1024x1024" },
-      { label: "竖版", value: "1024x1536" },
-      { label: "横版", value: "1536x1024" },
-    ],
-    [],
-  );
-
   async function handleGenerate() {
     if (!currentUser) {
       router.push("/login");
@@ -239,6 +279,7 @@ export function GeneratorStudio({
               formData.append("model", model);
               formData.append("prompt", prompt);
               formData.append("providerMode", providerMode);
+              formData.append("size", size);
               if (selectedChannelId && providerMode === "built_in") {
                 formData.append("channelId", selectedChannelId);
               }
@@ -302,7 +343,7 @@ export function GeneratorStudio({
     setSessionGenerations((current) => [...current, generation]);
     // Update session in localStorage
     setSessions((prev) => {
-      let updated = [...prev];
+      const updated = [...prev];
       let session = updated.find((s) => s.id === activeSessionId);
       if (!session) {
         // Create session on first generation if none active
@@ -323,9 +364,6 @@ export function GeneratorStudio({
       return updated;
     });
     setPrompt("");
-    if (generation.providerMode === "built_in") {
-      setCredits((current) => Math.max(0, current - generation.creditsSpent));
-    }
   }
 
   async function handleReferenceImageChange(file: File | null) {
@@ -348,7 +386,7 @@ export function GeneratorStudio({
       const response = await fetch(proxyUrl);
       if (!response.ok) throw new Error("fetch failed");
       const blob = await response.blob();
-      const file = new File([blob], `edit-${Date.now()}.png`, {
+      const file = new File([blob], "edit-source.png", {
         type: blob.type || "image/png",
       });
       await handleReferenceImageChange(file);
@@ -602,7 +640,7 @@ export function GeneratorStudio({
                   <div className="flex flex-col gap-2 max-w-[85%] w-full">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-[var(--ink)]">Narra AI</span>
-                      <span className="text-xs text-[var(--ink-soft)]">{generation.model} • {generation.size}</span>
+                      <span className="text-xs text-[var(--ink-soft)]">{generation.model} • {getSizeLabel(generation.size)}</span>
                     </div>
                     
                     {generation.images.length > 0 ? (
@@ -614,12 +652,17 @@ export function GeneratorStudio({
                               key={image.id}
                               className="group relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)]/50 shadow-sm"
                             >
-                              <img
-                                src={image.url}
-                                alt="生成结果"
-                                className="w-full h-auto object-cover cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
-                                onClick={() => setZoomedImage(image.url)}
-                              />
+                              <div
+                                className="overflow-hidden bg-[var(--surface-strong)]/40"
+                                style={getAspectRatio(generation.size) ? { aspectRatio: getAspectRatio(generation.size) } : undefined}
+                              >
+                                <img
+                                  src={image.url}
+                                  alt="生成结果"
+                                  className="size-full object-cover cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
+                                  onClick={() => setZoomedImage(image.url)}
+                                />
+                              </div>
                               {/* 底部操作栏 — 始终可见 */}
                               <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-[var(--line)]/50 bg-[var(--surface)]/80">
                                 <button
@@ -765,6 +808,7 @@ export function GeneratorStudio({
                 <button
                   type="button"
                   onClick={() => startTransition(handleGenerate)}
+                  aria-label="发送"
                   disabled={isPending || (!prompt.trim() && !referenceImage)}
                   className="group relative flex size-10 items-center justify-center overflow-hidden rounded-full bg-[var(--ink)] text-white shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
                 >
@@ -804,22 +848,21 @@ export function GeneratorStudio({
                   </button>
                 </div>
 
-                {/* 尺寸切换（文生图独有） */}
-                {generationType === "text_to_image" && (
-                  <div className="flex items-center rounded-lg bg-[var(--surface-strong)] p-0.5 hidden sm:flex">
-                    {sizeOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setSize(opt.value as "1024x1024" | "1024x1536" | "1536x1024")}
-                        className={`rounded-md px-2 py-1 text-xs transition-colors ${
-                          size === opt.value ? "bg-white text-black shadow-sm" : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
+                <label className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs text-[var(--ink-soft)]">
+                  <span className="shrink-0">宽高比</span>
+                  <select
+                    aria-label="宽高比"
+                    value={size}
+                    onChange={(event) => setSize(event.target.value as GenerationSizeToken)}
+                    className="min-w-0 bg-transparent text-xs font-medium text-[var(--ink)] outline-none"
+                  >
+                    {SIZE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
                     ))}
-                  </div>
-                )}
+                  </select>
+                </label>
 
                 {/* 高级设置按钮 */}
                 <button
@@ -919,7 +962,7 @@ export function GeneratorStudio({
                           <input
                             value={customBaseUrl}
                             onChange={(e) => setCustomBaseUrl(e.target.value)}
-                            placeholder="Base URL (例如: https://api.openai.com/v1)"
+                            placeholder="Base URL（需兼容 chatgpt2api 六比例图片协议）"
                             className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-strong)]/50 px-3 py-1.5 text-sm outline-none focus:border-[var(--accent)]"
                           />
                           <input
@@ -948,10 +991,13 @@ export function GeneratorStudio({
                             </button>
                           </div>
                           {modelProbeError && <p className="text-[10px] text-rose-500 mt-1">{modelProbeError}</p>}
+                          <p className="text-[10px] text-[var(--ink-soft)]">
+                            自填渠道需兼容 chatgpt2api 图片协议，并支持 `auto / 1:1 / 3:4 / 9:16 / 4:3 / 16:9`。
+                          </p>
                         </div>
                       ) : (
                         <div className="rounded-lg border border-dashed border-[var(--line)] bg-[var(--surface-strong)]/30 p-3 text-xs text-[var(--ink-soft)]">
-                          当前使用站点内置通道，每次生成默认扣除 5 积分。
+                          当前使用站点内置通道，每次生成默认扣除 5 积分，并按兼容 chatgpt2api 的六比例图片协议接入。
                         </div>
                       )}
                     </div>

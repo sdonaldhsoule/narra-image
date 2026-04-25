@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return jsonError(
-      `当前渠道无法自动拉取模型：${getErrorMessage(error)}`,
+      `当前渠道无法自动拉取模型：${getErrorMessage(error)}。请确认该渠道兼容 chatgpt2api 图片协议。`,
       400,
     );
   }

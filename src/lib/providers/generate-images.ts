@@ -5,7 +5,7 @@ import OpenAI, { toFile } from "openai";
 import { persistGeneratedImage } from "@/lib/storage/persist-generated-image";
 import { getBuiltInProviderConfig } from "@/lib/providers/built-in-provider";
 import { resolveGenerationProvider } from "@/lib/providers/resolve-provider";
-import type { GenerationType, ProviderMode } from "@/lib/types";
+import type { GenerationSizeToken, GenerationType, ProviderMode } from "@/lib/types";
 
 type CustomProviderConfig = {
   apiKey: string;
@@ -22,7 +22,7 @@ type GenerateImagesInput = {
   prompt: string;
   providerMode: ProviderMode;
   seed?: number | null;
-  size: string;
+  size: GenerationSizeToken;
   sourceImage?: {
     data: Buffer;
     fileName: string;
@@ -56,10 +56,14 @@ export async function generateImages(input: GenerateImagesInput) {
     throw new Error("请先上传参考图");
   }
 
-  const generateSize =
-    input.size === "1024x1536" || input.size === "1536x1024"
-      ? input.size
-      : "1024x1024";
+  // 站内统一接入兼容 chatgpt2api 的图片代理，SDK 的静态类型比代理实际支持的比例 token 更窄。
+  const compatibleSize = input.size as unknown as
+    | "auto"
+    | "1024x1024"
+    | "1024x1536"
+    | "1536x1024"
+    | "256x256"
+    | "512x512";
 
   const result = input.generationType === "image_to_image"
     ? await client.images.edit({
@@ -73,12 +77,13 @@ export async function generateImages(input: GenerateImagesInput) {
         model: input.model || provider.model,
         n: 1,
         prompt: input.prompt,
+        size: compatibleSize,
       })
     : await client.images.generate({
         model: input.model || provider.model,
         n: input.count,
         prompt: input.prompt,
-        size: generateSize,
+        size: compatibleSize,
         ...(input.negativePrompt || input.seed
           ? {
               extra_body: {

@@ -22,9 +22,69 @@ describe("生成请求解析", () => {
     expect(result.generationType).toBe("text_to_image");
     expect(result.image).toBeNull();
     expect(result.prompt).toBe("电影感夜景肖像");
+    expect(result.size).toBe("1:1");
+  });
+
+  it("解析 JSON 文生图请求时保留新的比例 token", async () => {
+    const request = new Request("https://example.com/api/generate", {
+      body: JSON.stringify({
+        count: 1,
+        generationType: "text_to_image",
+        model: "gpt-image-1",
+        prompt: "电影感夜景肖像",
+        providerMode: "built_in",
+        size: "16:9",
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+
+    const result = await parseGenerateRequest(request);
+
+    expect(result.size).toBe("16:9");
+  });
+
+  it("解析 JSON 文生图请求时兼容旧像素值", async () => {
+    const request = new Request("https://example.com/api/generate", {
+      body: JSON.stringify({
+        count: 1,
+        generationType: "text_to_image",
+        model: "gpt-image-1",
+        prompt: "电影感夜景肖像",
+        providerMode: "built_in",
+        size: "1536x1024",
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+
+    const result = await parseGenerateRequest(request);
+
+    expect(result.size).toBe("4:3");
   });
 
   it("解析 form-data 图生图请求并提取参考图", async () => {
+    const formData = new FormData();
+    formData.append("generationType", "image_to_image");
+    formData.append("model", "gpt-image-1");
+    formData.append("prompt", "把这张图调成胶片质感");
+    formData.append("providerMode", "built_in");
+    formData.append("size", "9:16");
+    formData.append("image", new File(["fake-image"], "source.png", { type: "image/png" }));
+
+    const result = await parseGenerateRequest(formData);
+
+    expect(result.generationType).toBe("image_to_image");
+    expect(result.image?.name).toBe("source.png");
+    expect(result.count).toBe(1);
+    expect(result.size).toBe("9:16");
+  });
+
+  it("图生图 form-data 未传 size 时默认使用 auto", async () => {
     const formData = new FormData();
     formData.append("generationType", "image_to_image");
     formData.append("model", "gpt-image-1");
@@ -34,9 +94,7 @@ describe("生成请求解析", () => {
 
     const result = await parseGenerateRequest(formData);
 
-    expect(result.generationType).toBe("image_to_image");
-    expect(result.image?.name).toBe("source.png");
-    expect(result.count).toBe(1);
+    expect(result.size).toBe("auto");
   });
 
   it("图生图缺少参考图时直接报错", async () => {

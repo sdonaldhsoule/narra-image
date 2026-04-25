@@ -1,9 +1,31 @@
 import { z } from "zod";
 
-import {
-  adminWorkReviewActions,
-  userWorkShowcaseActions,
-} from "@/lib/work-showcase";
+import type { GenerationSizeToken } from "@/lib/types";
+import { generationSizeTokens, legacyGenerationSizeMap } from "@/lib/types";
+import { adminWorkReviewActions, userWorkShowcaseActions } from "@/lib/work-showcase";
+
+const generationSizeTokenSet = new Set<string>(generationSizeTokens);
+
+function normalizeGenerationSize(value: string, ctx: z.RefinementCtx): GenerationSizeToken {
+  const normalized = legacyGenerationSizeMap[value as keyof typeof legacyGenerationSizeMap] ?? value;
+
+  if (generationSizeTokenSet.has(normalized)) {
+    return normalized as GenerationSizeToken;
+  }
+
+  ctx.addIssue({
+    code: "custom",
+    message: "尺寸仅支持 auto、1:1、3:4、9:16、4:3、16:9",
+  });
+
+  return z.NEVER;
+}
+
+export const generationSizeSchema = z.string()
+  .trim()
+  .min(1)
+  .transform((value, ctx) => normalizeGenerationSize(value, ctx))
+  .default("1:1");
 
 export const registerSchema = z.object({
   email: z.email("请输入正确的邮箱"),
@@ -34,7 +56,7 @@ export const generateSchema = z.object({
   prompt: z.string().trim().min(2, "提示词至少 2 个字符").max(2000),
   providerMode: z.enum(["built_in", "custom"]).default("built_in"),
   seed: z.number().int().positive().optional().nullable(),
-  size: z.string().trim().min(1).default("1024x1024"),
+  size: generationSizeSchema,
 });
 
 export const inviteCreateSchema = z.object({

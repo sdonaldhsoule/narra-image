@@ -40,7 +40,7 @@ export async function parseGenerateRequest(request: Request | FormData) {
       prompt: toNullableString(formData.get("prompt")),
       providerMode: toNullableString(formData.get("providerMode")) || "built_in",
       seed: null,
-      size: "参考图",
+      size: toNullableString(formData.get("size")) || "auto",
     });
 
     return {
