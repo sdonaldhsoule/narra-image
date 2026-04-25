@@ -9,12 +9,16 @@ import {
 } from "@/lib/auth/linuxdo-oauth";
 
 const OAUTH_STATE_COOKIE = "linuxdo_oauth_state";
+const OAUTH_INVITE_COOKIE = "linuxdo_invite_code";
 
-export async function GET() {
+export async function GET(request: Request) {
   const config = await getLinuxDoConfig();
   if (!config || !config.isEnabled) {
     return NextResponse.json({ error: "LinuxDo 登录未启用" }, { status: 400 });
   }
+
+  const url = new URL(request.url);
+  const inviteCode = url.searchParams.get("inviteCode")?.trim() || "";
 
   const state = randomUUID();
   const redirectUri = getLinuxDoCallbackUrl();
@@ -31,6 +35,19 @@ export async function GET() {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
   });
+
+  // 携带邀请码到 callback：仅新用户首次绑定时使用，老用户登录会被忽略
+  if (inviteCode) {
+    cookieStore.set(OAUTH_INVITE_COOKIE, inviteCode, {
+      httpOnly: true,
+      maxAge: 600, // 10 分钟，覆盖第三方授权耗时
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  } else {
+    cookieStore.delete(OAUTH_INVITE_COOKIE);
+  }
 
   return response;
 }

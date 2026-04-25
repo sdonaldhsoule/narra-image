@@ -94,11 +94,33 @@ function buildAvatarUrl(avatarUrl: string): string {
   return `https://linux.do${avatarUrl.replace("{size}", "120")}`;
 }
 
-export async function findOrCreateOAuthUser(ldUser: LinuxDoUser) {
+export type FindOrCreateOAuthInput = {
+  ldUser: LinuxDoUser;
+  inviteCode?: string | null;
+};
+
+type OAuthUser = {
+  avatarUrl: string | null;
+  credits: number;
+  email: string;
+  id: string;
+  nickname: string | null;
+  role: "USER" | "ADMIN";
+};
+
+export type FindOrCreateOAuthResult =
+  | { ok: true; user: OAuthUser }
+  | { ok: false; reason: "invite_required" | "invite_invalid" };
+
+export async function findOrCreateOAuthUser(
+  input: FindOrCreateOAuthInput,
+): Promise<FindOrCreateOAuthResult> {
+  const { ldUser } = input;
+  const inviteCode = input.inviteCode?.trim() || null;
   const oauthId = String(ldUser.id);
   const avatarUrl = ldUser.avatar_url ? buildAvatarUrl(ldUser.avatar_url) : null;
 
-  // 先查找已有 OAuth 绑定
+  // 先查找已有 OAuth 绑定（老用户登录路径，跳过邀请码）
   const existingOAuth = await db.user.findFirst({
     where: {
       oauthProvider: "linuxdo",
@@ -110,8 +132,7 @@ export async function findOrCreateOAuthUser(ldUser: LinuxDoUser) {
   });
 
   if (existingOAuth) {
-    // 更新昵称和头像（如果用户在 LinuxDo 更新了）
-    return db.user.update({
+    const updated = await db.user.update({
       where: { id: existingOAuth.id },
       data: {
         ...(ldUser.name && !existingOAuth.nickname ? { nickname: ldUser.name } : {}),
@@ -119,45 +140,70 @@ export async function findOrCreateOAuthUser(ldUser: LinuxDoUser) {
       },
       select: oauthUserSelect,
     });
+    return { ok: true, user: updated as OAuthUser };
   }
 
   // 使用 linuxdo 用户名生成一个占位邮箱
   const email = `${ldUser.username}@linuxdo.oauth`;
 
-  // 检查邮箱是否已被注册（理论上不会，但防御性检查）
+  // 邮箱已存在但未绑定 OAuth：视作绑定路径，跳过邀请码（防御性兼容历史数据）
   const existingEmail = await db.user.findUnique({
     where: { email },
-    select: { id: true },
+    select: { id: true, nickname: true },
   });
 
   if (existingEmail) {
-    // 绑定 OAuth 到已有邮箱账号
     const updated = await db.user.update({
       where: { id: existingEmail.id },
       data: {
         oauthProvider: "linuxdo",
         oauthId,
+        ...(ldUser.name && !existingEmail.nickname ? { nickname: ldUser.name } : {}),
         ...(avatarUrl ? { avatarUrl } : {}),
       },
       select: oauthUserSelect,
     });
-    return updated;
+    return { ok: true, user: updated as OAuthUser };
   }
 
-  // 创建新用户
-  const newUser = await db.user.create({
-    data: {
-      avatarUrl,
-      credits: DEFAULT_INITIAL_CREDITS,
-      email,
-      nickname: ldUser.name || ldUser.username,
-      oauthId,
-      oauthProvider: "linuxdo",
-    },
-    select: oauthUserSelect,
-  });
+  // 全新用户：必须有有效邀请码
+  if (!inviteCode) {
+    return { ok: false, reason: "invite_required" };
+  }
 
-  return newUser;
+  // 在事务内校验邀请码并创建用户，避免邀请码被并发消费
+  return db.$transaction(async (tx) => {
+    const invite = await tx.inviteCode.findUnique({
+      where: { code: inviteCode },
+      select: { id: true, usedAt: true },
+    });
+
+    if (!invite || invite.usedAt) {
+      return { ok: false as const, reason: "invite_invalid" as const };
+    }
+
+    const newUser = await tx.user.create({
+      data: {
+        avatarUrl,
+        credits: DEFAULT_INITIAL_CREDITS,
+        email,
+        nickname: ldUser.name || ldUser.username,
+        oauthId,
+        oauthProvider: "linuxdo",
+      },
+      select: oauthUserSelect,
+    });
+
+    await tx.inviteCode.update({
+      where: { id: invite.id },
+      data: {
+        usedAt: new Date(),
+        usedById: newUser.id,
+      },
+    });
+
+    return { ok: true as const, user: newUser as OAuthUser };
+  });
 }
 
 export async function getLinuxDoConfig() {

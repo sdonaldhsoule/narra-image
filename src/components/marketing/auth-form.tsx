@@ -25,6 +25,7 @@ export function AuthForm({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(oauthError);
+  const [oauthInviteCode, setOauthInviteCode] = useState("");
 
   async function handleSubmit(formData: FormData) {
     setError(null);
@@ -72,15 +73,36 @@ export function AuthForm({
     });
   }
 
+  function buildOAuthHref(providerType: string) {
+    const trimmed = oauthInviteCode.trim();
+    if (!trimmed) return `/api/auth/oauth/${providerType}`;
+    return `/api/auth/oauth/${providerType}?inviteCode=${encodeURIComponent(trimmed)}`;
+  }
+
   return (
     <div className="grid gap-4">
       {/* OAuth 登录按钮 */}
       {oauthProviders.length > 0 && mode === "login" && (
         <div className="grid gap-3">
+          <div className="grid gap-2">
+            <label className="text-sm text-[var(--ink-soft)]">
+              邀请码
+              <span className="ml-2 text-xs text-[var(--ink-soft)]/70">
+                首次使用第三方登录时必填，老用户登录可留空
+              </span>
+            </label>
+            <input
+              value={oauthInviteCode}
+              onChange={(e) => setOauthInviteCode(e.target.value)}
+              placeholder="FOUNDING-ACCESS"
+              className="rounded-2xl border border-[var(--line)] bg-white/70 px-4 py-3 uppercase outline-none transition focus:border-[var(--accent)]"
+            />
+          </div>
+
           {oauthProviders.map((provider) => (
             <a
               key={provider.type}
-              href={`/api/auth/oauth/${provider.type}`}
+              href={buildOAuthHref(provider.type)}
               className="studio-card group flex items-center justify-center gap-3 rounded-[2rem] px-5 py-3.5 text-sm font-medium text-[var(--ink)] transition hover:-translate-y-0.5 hover:shadow-lg"
             >
               <ExternalLink className="size-4 text-[var(--accent)]" />

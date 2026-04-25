@@ -14,6 +14,7 @@ import { getEnv } from "@/lib/env";
 import { Role } from "@prisma/client";
 
 const OAUTH_STATE_COOKIE = "linuxdo_oauth_state";
+const OAUTH_INVITE_COOKIE = "linuxdo_invite_code";
 
 export async function GET(request: Request) {
   const appUrl = getEnv().APP_URL;
@@ -27,10 +28,12 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${appUrl}/login?error=缺少授权参数`);
     }
 
-    // 验证 state 防 CSRF
+    // 验证 state 防 CSRF；同时取出邀请码并清理 cookie
     const cookieStore = await cookies();
     const savedState = cookieStore.get(OAUTH_STATE_COOKIE)?.value;
+    const inviteCode = cookieStore.get(OAUTH_INVITE_COOKIE)?.value || null;
     cookieStore.delete(OAUTH_STATE_COOKIE);
+    cookieStore.delete(OAUTH_INVITE_COOKIE);
 
     if (!savedState || savedState !== state) {
       return NextResponse.redirect(`${appUrl}/login?error=授权状态验证失败`);
@@ -58,14 +61,23 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${appUrl}/login?error=LinuxDo账号未激活`);
     }
 
-    // 查找或创建用户
-    const user = await findOrCreateOAuthUser(ldUser);
+    // 查找或创建用户：新用户必须有有效邀请码
+    const result = await findOrCreateOAuthUser({ ldUser, inviteCode });
+    if (!result.ok) {
+      const message =
+        result.reason === "invite_required"
+          ? "首次使用 LinuxDo 登录需要填写邀请码"
+          : "邀请码已失效";
+      return NextResponse.redirect(
+        `${appUrl}/login?error=${encodeURIComponent(message)}`,
+      );
+    }
 
     // 设置 session
     const response = NextResponse.redirect(`${appUrl}/create`);
     await attachSessionCookie(response, {
-      role: fromPrismaRole(user.role as Role),
-      userId: user.id,
+      role: fromPrismaRole(result.user.role as Role),
+      userId: result.user.id,
     });
 
     return response;
