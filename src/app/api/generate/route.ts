@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { GenerationStatus } from "@prisma/client";
 
 import { db } from "@/lib/db";
@@ -96,38 +97,56 @@ export async function POST(request: Request) {
       ),
     );
 
-    const job = await db.generationJob.create({
-      data: {
-        count: body.count,
-        creditsSpent: 0,
-        generationType: toPrismaGenerationType(body.generationType),
-        model: body.model,
-        negativePrompt: body.negativePrompt,
-        outputCompression: body.outputCompression,
-        outputFormat: body.outputFormat,
-        prompt: body.prompt,
-        providerMode: toPrismaProviderMode(body.providerMode),
-        quality: body.quality,
-        moderation: body.moderation,
-        size: body.size,
-        sourceImageUrls,
-        status: GenerationStatus.PENDING,
-        userId: user.id,
-      },
-      include: {
-        images: true,
-      },
+    // 创建 PENDING 任务并预扣积分。预扣可避免连续点击造成的并发越扣，
+    // 失败时在 after() 内退还。
+    const job = await db.$transaction(async (tx) => {
+      const created = await tx.generationJob.create({
+        data: {
+          count: body.count,
+          creditsSpent: body.providerMode === "built_in" ? cost : 0,
+          generationType: toPrismaGenerationType(body.generationType),
+          model: body.model,
+          negativePrompt: body.negativePrompt,
+          outputCompression: body.outputCompression,
+          outputFormat: body.outputFormat,
+          prompt: body.prompt,
+          providerMode: toPrismaProviderMode(body.providerMode),
+          quality: body.quality,
+          moderation: body.moderation,
+          size: body.size,
+          sourceImageUrls,
+          status: GenerationStatus.PENDING,
+          userId: user.id,
+        },
+        include: {
+          images: true,
+        },
+      });
+
+      if (body.providerMode === "built_in" && cost > 0) {
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
+            credits: {
+              decrement: cost,
+            },
+          },
+        });
+      }
+
+      return created;
     });
     jobId = job.id;
 
-    const images = await generateImages({
+    const userId = user.id;
+    const generationParams = {
       count: body.count,
       customProvider: customProvider
         ? {
-          apiKey: customProvider.apiKey,
-          baseUrl: customProvider.baseUrl,
-          model: customProvider.model,
-        }
+            apiKey: customProvider.apiKey,
+            baseUrl: customProvider.baseUrl,
+            model: customProvider.model,
+          }
         : null,
       generationType: body.generationType,
       model: body.model,
@@ -141,79 +160,101 @@ export async function POST(request: Request) {
       seed: body.seed,
       size: body.size,
       sourceImages,
-      userId: user.id,
-    });
+      userId,
+    };
+    const customProviderForRemember =
+      customProvider && body.customProvider?.remember
+        ? {
+            apiKey: customProvider.apiKey,
+            baseUrl: customProvider.baseUrl,
+            label: customProvider.label || null,
+            model: customProvider.model,
+            models: body.customProvider?.models || [],
+          }
+        : null;
+    const providerMode = body.providerMode;
+    const builtInCost = providerMode === "built_in" ? cost : 0;
 
-    await db.$transaction(async (tx) => {
-      if (body.providerMode === "built_in" && cost > 0) {
-        await tx.user.update({
-          where: { id: user.id },
-          data: {
-            credits: {
-              decrement: cost,
+    // 响应返回后再调模型；任意耗时（5 分钟、十分钟）都不会再被前置网关切断。
+    after(async () => {
+      try {
+        const images = await generateImages(generationParams);
+
+        await db.$transaction(async (tx) => {
+          await tx.generationImage.createMany({
+            data: images.map((url) => ({
+              jobId: job.id,
+              url,
+            })),
+          });
+
+          await tx.generationJob.update({
+            where: { id: job.id },
+            data: {
+              status: GenerationStatus.SUCCEEDED,
             },
-          },
+          });
+
+          if (providerMode === "custom" && customProviderForRemember) {
+            await tx.savedProviderConfig.upsert({
+              where: { userId },
+              update: {
+                apiKeyEncrypted: await encryptProviderSecret(
+                  customProviderForRemember.apiKey,
+                  env.AUTH_SECRET,
+                ),
+                baseUrl: customProviderForRemember.baseUrl,
+                label: customProviderForRemember.label,
+                model: customProviderForRemember.model,
+                models: customProviderForRemember.models,
+              },
+              create: {
+                apiKeyEncrypted: await encryptProviderSecret(
+                  customProviderForRemember.apiKey,
+                  env.AUTH_SECRET,
+                ),
+                baseUrl: customProviderForRemember.baseUrl,
+                label: customProviderForRemember.label,
+                model: customProviderForRemember.model,
+                models: customProviderForRemember.models,
+                userId,
+              },
+            });
+          }
         });
+      } catch (error) {
+        // 模型生成失败：标记 FAILED + 退还预扣积分。
+        try {
+          await db.$transaction(async (tx) => {
+            await tx.generationJob.update({
+              where: { id: job.id },
+              data: {
+                creditsSpent: 0,
+                errorMessage: getErrorMessage(error),
+                status: GenerationStatus.FAILED,
+              },
+            });
+
+            if (builtInCost > 0) {
+              await tx.user.update({
+                where: { id: userId },
+                data: {
+                  credits: {
+                    increment: builtInCost,
+                  },
+                },
+              });
+            }
+          });
+        } catch {
+          // 退还失败时只能记录在 stderr，前端轮询仍能看到 FAILED。
+          console.error(`[generate] failed to mark job ${job.id} as FAILED`);
+        }
       }
-
-      await tx.generationImage.createMany({
-        data: images.map((url) => ({
-          jobId: job.id,
-          url,
-        })),
-      });
-
-      await tx.generationJob.update({
-        where: { id: job.id },
-        data: {
-          creditsSpent: cost,
-          status: GenerationStatus.SUCCEEDED,
-        },
-      });
-
-      if (
-        body.providerMode === "custom" &&
-        customProvider &&
-        body.customProvider?.remember
-      ) {
-        await tx.savedProviderConfig.upsert({
-          where: { userId: user.id },
-          update: {
-            apiKeyEncrypted: await encryptProviderSecret(
-              customProvider.apiKey,
-              env.AUTH_SECRET,
-            ),
-            baseUrl: customProvider.baseUrl,
-            label: customProvider.label || null,
-            model: customProvider.model,
-            models: body.customProvider?.models || [],
-          },
-          create: {
-            apiKeyEncrypted: await encryptProviderSecret(
-              customProvider.apiKey,
-              env.AUTH_SECRET,
-            ),
-            baseUrl: customProvider.baseUrl,
-            label: customProvider.label || null,
-            model: customProvider.model,
-            models: body.customProvider?.models || [],
-            userId: user.id,
-          },
-        });
-      }
-    });
-
-    const completedJob = await db.generationJob.findUniqueOrThrow({
-      where: { id: job.id },
-      include: {
-        images: {
-          orderBy: { createdAt: "asc" },
-        },
-      },
     });
 
     return jsonOk({
-      generation: serializeGeneration(completedJob),
+      generation: serializeGeneration(job),
     });
   } catch (error) {
     if (jobId) {

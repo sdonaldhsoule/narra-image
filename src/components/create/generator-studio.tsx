@@ -28,6 +28,7 @@ type GenerationItem = {
   count: number;
   createdAt: string;
   creditsSpent: number;
+  errorMessage?: string | null;
   generationType: GenerationType;
   id: string;
   images: Array<{
@@ -254,6 +255,64 @@ export function GeneratorStudio({
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
     }
   }, [prompt]);
+
+  // 后端用 after() 把图片生成异步化，前端按 generation.id 维护一份独立的轮询，
+  // 直到任务进入 succeeded/failed 才停。刷新页面或切回会话时，effect 会自动对
+  // 仍处于 pending 的 generation 续跑轮询。
+  const pollersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+
+  useEffect(() => {
+    const pendingIds = sessionGenerations
+      .filter((generation) => generation.status === "pending")
+      .map((generation) => generation.id);
+
+    pendingIds.forEach((id) => {
+      if (pollersRef.current.has(id)) return;
+
+      const tick = async () => {
+        try {
+          const response = await fetch(`/api/me/generations/${id}`);
+          if (!response.ok) return;
+          const json = (await response.json()) as {
+            data?: { generation: GenerationItem };
+          };
+          const updated = json?.data?.generation;
+          if (!updated) return;
+          if (updated.status === "pending") return;
+
+          setSessionGenerations((current) =>
+            current.map((generation) => (generation.id === id ? updated : generation)),
+          );
+          const handle = pollersRef.current.get(id);
+          if (handle) {
+            clearInterval(handle);
+            pollersRef.current.delete(id);
+          }
+        } catch {
+          // 单次轮询失败不致命，下一次 tick 继续尝试。
+        }
+      };
+
+      void tick();
+      const handle = setInterval(tick, 2000);
+      pollersRef.current.set(id, handle);
+    });
+
+    for (const [id, handle] of Array.from(pollersRef.current.entries())) {
+      if (!pendingIds.includes(id)) {
+        clearInterval(handle);
+        pollersRef.current.delete(id);
+      }
+    }
+  }, [sessionGenerations]);
+
+  useEffect(() => {
+    const pollers = pollersRef.current;
+    return () => {
+      pollers.forEach((handle) => clearInterval(handle));
+      pollers.clear();
+    };
+  }, []);
 
   const sortedGenerations = sessionGenerations;
   const sizeSelectValue = customSizeMode ? "custom" : getSizeSelectValue(size);
@@ -731,15 +790,21 @@ export function GeneratorStudio({
                 {/* 助手（生成结果）消息 */}
                 <div className="flex gap-4">
                   <div className="shrink-0 flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-purple-500 text-white shadow-md">
-                    <Sparkles className="size-5" />
+                    <Sparkles className={`size-5 ${generation.status === "pending" ? "animate-pulse" : ""}`} />
                   </div>
                   <div className="flex flex-col gap-2 max-w-[85%] w-full">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-[var(--ink)]">Narra AI</span>
-                      <span className="text-xs text-[var(--ink-soft)]">{getGenerationOptionSummary(generation)}</span>
+                      {generation.status === "pending" ? (
+                        <span className="text-xs text-[var(--ink-soft)] animate-pulse">正在生成中...</span>
+                      ) : (
+                        <span className="text-xs text-[var(--ink-soft)]">{getGenerationOptionSummary(generation)}</span>
+                      )}
                     </div>
-                    
-                    {generation.images.length > 0 ? (
+
+                    {generation.status === "pending" ? (
+                      <div className="h-48 w-64 rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)]/30 animate-pulse" />
+                    ) : generation.images.length > 0 ? (
                       <div className="space-y-3">
                         <p className="text-xs text-[var(--ink-soft)]">结果 {generation.images.length}</p>
                         <div className={`grid gap-3 ${generation.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`} style={{ maxWidth: generation.images.length === 1 ? "280px" : "400px" }}>
@@ -794,7 +859,7 @@ export function GeneratorStudio({
                       </div>
                     ) : (
                       <div className="rounded-2xl rounded-tl-none border border-rose-500/20 bg-rose-500/10 px-5 py-3.5 text-sm text-rose-400">
-                        生成失败或图片未能成功返回。
+                        {generation.errorMessage ? `生成失败：${generation.errorMessage}` : "生成失败或图片未能成功返回。"}
                       </div>
                     )}
                   </div>
@@ -803,21 +868,8 @@ export function GeneratorStudio({
             ))
           )}
           
-          {/* Loading 占位符 */}
-          {isPending && (
-            <div className="flex gap-4 animate-in fade-in duration-300">
-               <div className="shrink-0 flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-purple-500 text-white shadow-md">
-                 <Sparkles className="size-5 animate-pulse" />
-               </div>
-               <div className="flex flex-col gap-2 max-w-[85%] w-full">
-                 <div className="flex items-center gap-2">
-                   <span className="text-sm font-medium text-[var(--ink)]">Narra AI</span>
-                   <span className="text-xs text-[var(--ink-soft)] animate-pulse">正在生成中...</span>
-                 </div>
-                 <div className="h-48 w-64 rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)]/30 animate-pulse" />
-               </div>
-            </div>
-          )}
+          {/* 单条 generation 自身的 pending 状态会渲染为占位卡片，
+              这里不再需要全局 loading：发送多次时每条独立显示。 */}
         </div>
       </div>
 
