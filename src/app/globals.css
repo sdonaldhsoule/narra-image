@@ -382,3 +382,15 @@ textarea {
     animation: none;
   }
 }
+
+/* 全局 a11y 兜底：尊重用户的 reduced-motion 偏好，关掉所有动画/过渡 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
