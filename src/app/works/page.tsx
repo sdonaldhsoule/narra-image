@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/marketing/site-header";
 import { MyWorksBoard } from "@/components/works/my-works-board";
 import { serializeUser } from "@/lib/prisma-mappers";
 import { getCurrentUserRecord } from "@/lib/server/current-user";
-import { listUserWorks } from "@/lib/server/works";
+import { getUserWorksCounts, listUserWorksPage } from "@/lib/server/works";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +14,11 @@ export default async function WorksPage() {
     redirect("/login");
   }
 
-  const works = await listUserWorks(user.id);
+  const [initialPage, counts] = await Promise.all([
+    listUserWorksPage({ userId: user.id, limit: 24 }),
+    getUserWorksCounts(user.id),
+  ]);
   const currentUser = serializeUser(user);
-  const counts = {
-    featured: works.filter((work) => work.showcaseStatus === "FEATURED").length,
-    pending: works.filter((work) => work.showcaseStatus === "PENDING").length,
-    total: works.length,
-  };
 
   return (
     <main className="pb-20">
@@ -51,7 +49,11 @@ export default async function WorksPage() {
           </div>
         </div>
 
-        <MyWorksBoard works={works} />
+        <MyWorksBoard
+          initialItems={initialPage.items}
+          initialHasMore={initialPage.hasMore}
+          initialCursor={initialPage.nextCursor}
+        />
       </section>
     </main>
   );

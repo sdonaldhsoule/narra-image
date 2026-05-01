@@ -8,10 +8,13 @@ import {
   serializeFeaturedWork,
   serializeWork,
   type FeaturedWorkRecord,
+  type SerializedWork,
 } from "@/lib/prisma-mappers";
 
 const FEATURED_WORKS_PAGE_SIZE = 24;
 const FEATURED_WORKS_MAX = 100;
+const USER_WORKS_PAGE_SIZE = 24;
+const USER_WORKS_MAX_LIMIT = 60;
 
 const workBaseInclude = Prisma.validator<Prisma.GenerationImageInclude>()({
   job: {
@@ -67,21 +70,122 @@ const workAdminInclude = Prisma.validator<Prisma.GenerationImageInclude>()({
   },
 });
 
-export async function listUserWorks(userId: string, take = 60) {
+// 用户作品分页：cursor 复合排序 (createdAt desc, id desc) 保证稳定翻页
+type UserWorksCursor = {
+  createdAt: string;
+  id: string;
+};
+
+function encodeUserWorksCursor(cursor: UserWorksCursor) {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeUserWorksCursor(cursor?: string | null): UserWorksCursor | null {
+  if (!cursor) {
+    return null;
+  }
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    ) as Partial<UserWorksCursor>;
+    if (
+      typeof decoded.createdAt !== "string" ||
+      typeof decoded.id !== "string"
+    ) {
+      return null;
+    }
+    return { createdAt: decoded.createdAt, id: decoded.id };
+  } catch {
+    return null;
+  }
+}
+
+type ListUserWorksPageOptions = {
+  userId: string;
+  cursor?: string | null;
+  limit?: number;
+};
+
+export type UserWorksPage = {
+  hasMore: boolean;
+  items: SerializedWork[];
+  nextCursor: string | null;
+};
+
+export async function listUserWorksPage({
+  userId,
+  cursor,
+  limit,
+}: ListUserWorksPageOptions): Promise<UserWorksPage> {
+  const take = Math.min(
+    Math.max(limit ?? USER_WORKS_PAGE_SIZE, 1),
+    USER_WORKS_MAX_LIMIT,
+  );
+  const decoded = decodeUserWorksCursor(cursor);
+  const cursorDate = decoded ? new Date(decoded.createdAt) : null;
+
   const works = await db.generationImage.findMany({
     where: {
-      job: {
-        userId,
-      },
+      job: { userId },
+      ...(decoded && cursorDate
+        ? {
+            OR: [
+              { createdAt: { lt: cursorDate } },
+              {
+                createdAt: cursorDate,
+                id: { lt: decoded.id },
+              },
+            ],
+          }
+        : {}),
     },
     include: workBaseInclude,
-    orderBy: {
-      createdAt: "desc",
-    },
-    take,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: take + 1,
   });
 
-  return works.map(serializeWork);
+  const hasMore = works.length > take;
+  const visible = works.slice(0, take);
+  const items = visible.map(serializeWork);
+  const last = visible[visible.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? encodeUserWorksCursor({
+          createdAt: last.createdAt.toISOString(),
+          id: last.id,
+        })
+      : null;
+
+  return { hasMore, items, nextCursor };
+}
+
+export type UserWorksCounts = {
+  featured: number;
+  pending: number;
+  total: number;
+};
+
+export async function getUserWorksCounts(
+  userId: string,
+): Promise<UserWorksCounts> {
+  const [total, statusGroups] = await Promise.all([
+    db.generationImage.count({ where: { job: { userId } } }),
+    db.generationImage.groupBy({
+      by: ["showcaseStatus"],
+      where: { job: { userId } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const counts: UserWorksCounts = { featured: 0, pending: 0, total };
+  for (const group of statusGroups) {
+    if (group.showcaseStatus === ShowcaseStatus.PENDING) {
+      counts.pending = group._count._all;
+    } else if (group.showcaseStatus === ShowcaseStatus.FEATURED) {
+      counts.featured = group._count._all;
+    }
+  }
+  return counts;
 }
 
 export async function listFeaturedWorks(take = 6) {
