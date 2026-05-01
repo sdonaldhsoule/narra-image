@@ -5,7 +5,7 @@
 import type { GenerationImage, GenerationJob, User } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 
 import { getThumbUrl } from "@/lib/image-url";
 
@@ -172,6 +172,55 @@ export function InviteBatchToggle({
       }`}
     >
       {isPending ? "处理中..." : isPublic ? "关闭领取" : "开放领取"}
+    </button>
+  );
+}
+
+export function InviteBatchDelete({
+  batchId,
+  total,
+  remaining,
+}: {
+  batchId: string;
+  total: number;
+  remaining: number;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  async function handleDelete() {
+    const used = total - remaining;
+    const message =
+      used > 0
+        ? `确定要删除整个批次吗？共 ${total} 个邀请码（其中 ${used} 个已使用/已发放），删除后不可恢复。`
+        : `确定要删除整个批次吗？共 ${total} 个邀请码将被一并清除，且不可恢复。`;
+    if (!confirm(message)) return;
+
+    const response = await fetch(`/api/admin/invites/batches/${batchId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      alert(result?.error || "删除失败");
+      return;
+    }
+
+    startTransition(() => {
+      router.refresh();
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={isPending}
+      onClick={() => startTransition(handleDelete)}
+      className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 px-3 py-2 text-xs font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+      title="删除整个批次"
+    >
+      <Trash2 className="size-3.5" />
+      {isPending ? "删除中..." : "删除批次"}
     </button>
   );
 }

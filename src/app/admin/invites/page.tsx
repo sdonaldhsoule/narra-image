@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdminRecord } from "@/lib/server/current-user";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { AdminNav } from "@/components/admin/admin-nav";
-import { InviteBatchToggle, InviteCreator } from "@/components/admin/admin-actions";
+import { InviteBatchDelete, InviteBatchToggle, InviteCreator } from "@/components/admin/admin-actions";
 import { serializeUser } from "@/lib/prisma-mappers";
 import { AdminPagination } from "@/components/admin/admin-pagination";
 import { InviteDeleteBtn, InviteTableActions } from "@/components/admin/invite-table-actions";
@@ -150,6 +150,11 @@ export default async function AdminInvitesPage({
                     </span>
                   )}
                   <InviteBatchToggle batchId={batch.id} isPublic={batch.isPublic} />
+                  <InviteBatchDelete
+                    batchId={batch.id}
+                    total={batch.inviteCodes.length}
+                    remaining={remainingCount}
+                  />
                 </div>
               </article>
             );

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Download, Gift, Power } from "lucide-react";
+import { Download, Gift, Power, Trash2 } from "lucide-react";
 
 type RedeemMode = "single_use" | "shared";
 
@@ -215,5 +215,54 @@ export function RedeemBatchDownload({ batchId }: { batchId: string }) {
       <Download className="size-3.5" />
       下载 .txt
     </a>
+  );
+}
+
+export function RedeemBatchDelete({
+  batchId,
+  total,
+  remaining,
+}: {
+  batchId: string;
+  total: number;
+  remaining: number;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  async function handleDelete() {
+    const used = Math.max(0, total - remaining);
+    const message =
+      used > 0
+        ? `确定要删除整个批次吗？共 ${total} 个兑换码（其中 ${used} 次已被兑换），所有兑换码与兑换记录都会被清除，不可恢复。`
+        : `确定要删除整个批次吗？共 ${total} 个兑换码将被一并清除，且不可恢复。`;
+    if (!confirm(message)) return;
+
+    const response = await fetch(`/api/admin/redeem-codes/batches/${batchId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      alert(result?.error || "删除失败");
+      return;
+    }
+
+    startTransition(() => {
+      router.refresh();
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={isPending}
+      onClick={() => startTransition(handleDelete)}
+      className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 px-3 py-2 text-xs font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+      title="删除整个批次"
+    >
+      <Trash2 className="size-3.5" />
+      {isPending ? "删除中..." : "删除批次"}
+    </button>
   );
 }

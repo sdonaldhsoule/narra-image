@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { serializeUser } from "@/lib/prisma-mappers";
 import { requireAdminRecord } from "@/lib/server/current-user";
 import { AdminNav } from "@/components/admin/admin-nav";
-import { RedeemBatchDownload, RedeemBatchToggle, RedeemCodeCreator } from "@/components/admin/redeem-code-manager";
+import { RedeemBatchDelete, RedeemBatchDownload, RedeemBatchToggle, RedeemCodeCreator } from "@/components/admin/redeem-code-manager";
 import { SiteHeader } from "@/components/marketing/site-header";
 
 export const dynamic = "force-dynamic";
@@ -131,6 +131,11 @@ export default async function AdminRedeemCodesPage() {
                 <div className="flex flex-wrap items-end justify-start gap-2 xl:justify-end">
                   <RedeemBatchDownload batchId={batch.id} />
                   <RedeemBatchToggle batchId={batch.id} isActive={batch.isActive} />
+                  <RedeemBatchDelete
+                    batchId={batch.id}
+                    total={batch.codes.length}
+                    remaining={remaining}
+                  />
                 </div>
               </article>
             );
