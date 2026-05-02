@@ -2,16 +2,22 @@
 
 一个面向普通用户的高颜值生图网站。
 
+> 在线站点：[narra.c0ffee.space](https://narra.c0ffee.space) ｜ 仓库：<https://github.com/0401lucky/narra-image> ｜ 协议：[AGPL-3.0](#开源协议)
+
 核心特性：
 
 - 首页生成器主导，作品流辅助
-- 邮箱 + 密码 + 邀请码注册
+- 邮箱 + 密码 + 邀请码注册，支持公开邀请码领取页
+- LinuxDo OAuth 第三方登录（后台可开关）
+- Cloudflare Turnstile 人机验证（覆盖登录 / 注册 / 邀请码兑换）
+- 每日签到积分激励，兑换码批量发放积分
 - 内置渠道默认扣积分，默认 `5` 积分 / 次
 - 新用户默认 `500` 积分
-- 支持高级用户保存自填 OpenAI 兼容渠道
+- 多渠道生图：内置渠道 + 用户自填 OpenAI 兼容渠道
 - 支持根据 `Base URL + API Key` 拉取兼容渠道公开的模型列表
 - 创作台支持 `gpt-image-2` 的 1K / 2K / 4K / 自定义尺寸、质量和输出格式参数
-- 管理后台可管理邀请码、用户积分、生成记录和首页精选
+- 作品广场：用户提交、管理员审核、点赞精选
+- 管理后台：用户、邀请码、兑换码、生成记录、福利、作品审核 + 系统设置（登录源 / 人机验证 / 生图渠道）
 - 基于 `Next.js + Prisma + PostgreSQL`，支持 `Docker` 部署到 `Zeabur`
 
 ## 本地开发
@@ -99,3 +105,22 @@ docker compose up --build -d
 - 这对 `OpenAI Images API` 和实现了 OpenAI compatibility 的部分 Gemini / 第三方网关可用。
 - 如果某个渠道没有实现 `/models`，或者实现不完整，后台和创作页会提示你手动填写模型名。
 - 拉取到的是“渠道公开模型列表”，不保证每一个都能生图；界面会把更像生图模型的 ID 优先排在前面。
+
+## 系统设置
+
+低频但关键的配置统一放在 `/admin/settings`：
+
+- **登录源**：配置 LinuxDo 等第三方 OAuth 登录
+- **人机验证**：Cloudflare Turnstile，可独立开关登录 / 注册 / 邀请码兑换 / 图像生成 4 个保护点。配置流程见后台页内提示，凭证申请：<https://developers.cloudflare.com/turnstile/get-started/>
+- **生图渠道**：管理多个 OpenAI 兼容 API 渠道，启停、改 key、调价
+
+## 开源协议
+
+本项目采用 **GNU Affero General Public License v3.0** —— 详见 [LICENSE](./LICENSE)。
+
+- ✅ 自由阅读、使用、修改、自部署、二次分发
+- ✅ 学术研究、私人项目、内部使用都没问题
+- ⚠️ **如果你修改并对外提供网络服务**（不只是分发源码），必须同样以 AGPL-3.0 开源你的修改
+- ⚠️ 商用闭源 / SaaS 化部署需另行获取商业授权
+
+需要商业授权或合作意向，请通过 [GitHub Issues](https://github.com/0401lucky/narra-image/issues) 联系。
