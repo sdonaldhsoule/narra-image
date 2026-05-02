@@ -19,8 +19,20 @@ type Work = {
   likeCount: number;
   likedByMe: boolean;
   prompt: string;
+  size: string;
   title: string;
 };
+
+// 把生图任务记录里的 "1024x1536" 解析成 [宽, 高]。
+// 解析失败一律按 1:1 兜底，宁可让首屏占位略矮，也不让浏览器没占位再重排。
+function parseAspectSize(size: string): { width: number; height: number } {
+  const match = /^(\d+)x(\d+)$/i.exec(size.trim());
+  if (!match) return { width: 1, height: 1 };
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!width || !height) return { width: 1, height: 1 };
+  return { width, height };
+}
 
 type FeaturedResponse = {
   hasMore: boolean;
@@ -147,7 +159,9 @@ export function FeaturedGallery({
   return (
     <>
       <div className="columns-1 space-y-5 gap-5 sm:columns-2 lg:columns-3 xl:columns-4">
-        {items.map((work, index) => (
+        {items.map((work, index) => {
+          const { width, height } = parseAspectSize(work.size);
+          return (
           <motion.article
             key={work.id}
             initial={{ opacity: 0, y: 12 }}
@@ -159,13 +173,16 @@ export function FeaturedGallery({
             }}
             className="studio-card group relative block break-inside-avoid overflow-hidden rounded-[1.5rem]"
           >
-            <Link href={`/works/${work.id}`} className="block">
+            <Link href={`/works/${work.id}`} prefetch={false} className="block">
               <img
                 src={getThumbUrl(work.image, 640)}
                 alt={work.title}
+                width={width}
+                height={height}
                 loading="lazy"
                 decoding="async"
-                className="w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                style={{ aspectRatio: `${width} / ${height}` }}
+                className="block h-auto w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[var(--ink)]/85 via-[var(--ink)]/20 to-transparent opacity-70 transition-opacity duration-300 group-hover:opacity-100" />
               <div className="absolute bottom-0 left-0 right-0 flex items-end justify-between gap-4 p-5">
@@ -214,7 +231,8 @@ export function FeaturedGallery({
               {work.likeCount}
             </button>
           </motion.article>
-        ))}
+          );
+        })}
       </div>
 
       {hasMore && items.length < 100 ? (

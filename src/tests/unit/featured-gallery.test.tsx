@@ -19,6 +19,7 @@ function createWork(id: string) {
     likeCount: 0,
     likedByMe: false,
     prompt: `prompt-${id}`,
+    size: "1024x1024",
     title: `title-${id}`,
   };
 }

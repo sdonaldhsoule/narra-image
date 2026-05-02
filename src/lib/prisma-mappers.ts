@@ -105,6 +105,9 @@ export type SerializedFeaturedWork = {
   likeCount: number;
   likedByMe: boolean;
   prompt: string;
+  // 形如 "1024x1536"。让前端在图片解码前就能用真实长宽比预留容器高度，
+  // 避免 CSS columns 瀑布流在滚动期因图片陆续到达而重排跳列。
+  size: string;
   title: string;
 };
 
@@ -217,6 +220,7 @@ export function serializeFeaturedWork(work: FeaturedWorkRecord): SerializedFeatu
     likeCount: work._count?.likes ?? 0,
     likedByMe: Boolean(work.likes?.length),
     prompt: work.showPromptPublic ? work.job.prompt : "作者未公开提示词",
+    size: work.job.size,
     title: work.job.model,
   };
 }
