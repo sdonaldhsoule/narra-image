@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUpRight, Heart, User } from "lucide-react";
 import { motion } from "motion/react";
 
-import { getThumbUrl } from "@/lib/image-url";
+import { getThumbSrcSet, getThumbUrl } from "@/lib/image-url";
 
 type Work = {
   authorAvatar: string | null;
@@ -143,11 +143,15 @@ export function FeaturedGallery({
       return;
     }
 
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        void loadMore();
-      }
-    });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadMore();
+        }
+      },
+      // 提前 400px 触发加载，移动端拇指快速滑动时不至于滚到底再卡顿等。
+      { rootMargin: "400px" },
+    );
 
     observer.observe(sentinelRef.current);
 
@@ -158,7 +162,7 @@ export function FeaturedGallery({
 
   return (
     <>
-      <div className="columns-1 space-y-5 gap-5 sm:columns-2 lg:columns-3 xl:columns-4">
+      <div className="columns-1 space-y-5 gap-5 sm:columns-2 md:columns-3 xl:columns-4">
         {items.map((work, index) => {
           const { width, height } = parseAspectSize(work.size);
           return (
@@ -175,7 +179,9 @@ export function FeaturedGallery({
           >
             <Link href={`/works/${work.id}`} prefetch={false} className="block">
               <img
-                src={getThumbUrl(work.image, 640)}
+                src={getThumbUrl(work.image, 1080)}
+                srcSet={getThumbSrcSet(work.image, [640, 828, 1080, 1200, 1920])}
+                sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, (min-width: 640px) 50vw, 100vw"
                 alt={work.title}
                 width={width}
                 height={height}

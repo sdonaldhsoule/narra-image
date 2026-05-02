@@ -26,3 +26,19 @@ export function getThumbUrl(
   });
   return `/_next/image?${params.toString()}`;
 }
+
+/**
+ * 生成响应式 srcset 字符串，配合 <img sizes> 让浏览器根据视口和 DPR
+ * 自己挑合适的档位，避免移动端高 DPR 屏拉糊、桌面大屏拉浪费。
+ *
+ * @param widths 必须命中 next.config 的 imageSizes/deviceSizes，否则 Next 会拒绝
+ */
+export function getThumbSrcSet(
+  src: string | null | undefined,
+  widths: number[],
+  quality = 75,
+): string {
+  if (!src) return "";
+  if (src.startsWith("data:") || src.startsWith("blob:")) return "";
+  return widths.map((w) => `${getThumbUrl(src, w, quality)} ${w}w`).join(", ");
+}
