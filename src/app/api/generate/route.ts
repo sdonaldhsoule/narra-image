@@ -182,9 +182,11 @@ export async function POST(request: Request) {
 
         await db.$transaction(async (tx) => {
           await tx.generationImage.createMany({
-            data: images.map((url) => ({
+            data: images.map((image) => ({
+              height: image.actualHeight,
               jobId: job.id,
-              url,
+              url: image.url,
+              width: image.actualWidth,
             })),
           });
 

@@ -176,4 +176,94 @@ describe("generateImages 的图片参数透传", () => {
       }),
     );
   });
+
+  it("从响应 item.size 字段提取实际生效尺寸", async () => {
+    generateMock.mockResolvedValue({
+      data: [{ size: "1024x1024", url: "https://example.com/generated.png" }],
+    });
+
+    const records = await generateImages({
+      count: 1,
+      customProvider: null,
+      generationType: "text_to_image",
+      model: "gpt-image-2",
+      prompt: "降级测试",
+      providerMode: "built_in",
+      size: "3840x2160",
+      userId: "user-1",
+    });
+
+    expect(records).toEqual([
+      {
+        actualHeight: 1024,
+        actualSize: "1024x1024",
+        actualWidth: 1024,
+        url: "https://example.com/generated.png",
+      },
+    ]);
+  });
+
+  it("从 b64_json 嗅探 PNG 头部得到实际尺寸", async () => {
+    // 构造一张 1024x768 的最小 PNG
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from([0x00, 0x00, 0x00, 0x0d]),
+      Buffer.from("IHDR"),
+      (() => {
+        const data = Buffer.alloc(13);
+        data.writeUInt32BE(1024, 0);
+        data.writeUInt32BE(768, 4);
+        data.writeUInt8(8, 8);
+        return data;
+      })(),
+      Buffer.alloc(4),
+    ]);
+    generateMock.mockResolvedValue({
+      data: [{ b64_json: png.toString("base64") }],
+    });
+
+    const records = await generateImages({
+      count: 1,
+      customProvider: null,
+      generationType: "text_to_image",
+      model: "gpt-image-2",
+      prompt: "嗅探测试",
+      providerMode: "built_in",
+      size: "2048x2048",
+      userId: "user-1",
+    });
+
+    expect(records[0]?.actualSize).toBe("1024x768");
+    expect(records[0]?.actualWidth).toBe(1024);
+    expect(records[0]?.actualHeight).toBe(768);
+  });
+
+  it("响应里没有任何尺寸线索时 actualSize 为 null", async () => {
+    generateMock.mockResolvedValue({
+      data: [{ url: "https://example.com/no-meta.png" }],
+    });
+    // fetch 失败时静默返回 null
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+
+    try {
+      const records = await generateImages({
+        count: 1,
+        customProvider: null,
+        generationType: "text_to_image",
+        model: "gpt-image-2",
+        prompt: "缺省尺寸",
+        providerMode: "built_in",
+        size: "1024x1024",
+        userId: "user-1",
+      });
+      expect(records[0]).toEqual({
+        actualHeight: null,
+        actualSize: null,
+        actualWidth: null,
+        url: "https://example.com/no-meta.png",
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });

@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { Sparkles, WandSparkles, Download, ZoomIn, X, ImagePlus, Settings2, Send, Paperclip, SquarePen, PanelLeftClose, PanelLeftOpen, Trash2, MessageSquare } from "lucide-react";
+import { Sparkles, WandSparkles, Download, ZoomIn, X, ImagePlus, Settings2, Send, Paperclip, SquarePen, PanelLeftClose, PanelLeftOpen, Trash2, MessageSquare, AlertTriangle } from "lucide-react";
 import { useMemo, useRef, useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -37,6 +37,9 @@ type GenerationItem = {
   generationType: GenerationType;
   id: string;
   images: Array<{
+    actualHeight?: number | null;
+    actualSize?: string | null;
+    actualWidth?: number | null;
     id: string;
     url: string;
   }>;
@@ -133,6 +136,43 @@ function getGenerationOptionSummary(generation: GenerationItem) {
   const format = (generation.outputFormat ?? "png").toUpperCase();
 
   return `${generation.model} • ${getSizeLabel(generation.size)} • ${quality} • ${format}`;
+}
+
+// 把请求 size 归一化为 "WxH"；auto / 非法值返回 null。
+function parseSizePixels(size: string | null | undefined): { width: number; height: number } | null {
+  if (!size) return null;
+  const match = size.trim().match(/^(\d+)\s*[xX×]\s*(\d+)$/);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+  return { height, width };
+}
+
+// 实际尺寸与请求尺寸像素数差异 > 5% 视为渠道降级/缩水。
+// 容差用来吸收 16 倍数对齐这类合法的细微规整。
+function describeSizeDowngrade(generation: GenerationItem, image: GenerationItem["images"][number]) {
+  if (!image.actualSize) return null;
+  if (!generation.size || generation.size.toLowerCase() === "auto") return null;
+
+  const requested = parseSizePixels(generation.size);
+  const actual = parseSizePixels(image.actualSize);
+  if (!requested || !actual) return null;
+
+  const requestedPixels = requested.width * requested.height;
+  const actualPixels = actual.width * actual.height;
+  if (requestedPixels === 0) return null;
+
+  const delta = Math.abs(requestedPixels - actualPixels) / requestedPixels;
+  if (delta <= 0.05) return null;
+
+  return {
+    actual: image.actualSize,
+    requested: generation.size,
+    shrunk: actualPixels < requestedPixels,
+  };
 }
 
 const MAX_REFERENCE_IMAGES = 16;
@@ -845,7 +885,9 @@ export function GeneratorStudio({
                       <div className="space-y-3">
                         <p className="text-xs text-[var(--ink-soft)]">结果 {generation.images.length}</p>
                         <div className={`grid gap-3 ${generation.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`} style={{ maxWidth: generation.images.length === 1 ? "280px" : "400px" }}>
-                          {generation.images.map((image) => (
+                          {generation.images.map((image) => {
+                            const downgrade = describeSizeDowngrade(generation, image);
+                            return (
                             <div
                               key={image.id}
                               className="group relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)]/50 shadow-sm"
@@ -863,6 +905,17 @@ export function GeneratorStudio({
                                   onClick={() => setZoomedImage(image.url)}
                                 />
                               </div>
+                              {downgrade && (
+                                <div
+                                  className="flex items-start gap-1.5 border-t border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-600 dark:text-amber-300"
+                                  title="渠道返回的实际像素与请求不一致，常见于 free 号池/反向代理对超大尺寸的静默降级"
+                                >
+                                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                                  <span>
+                                    {downgrade.shrunk ? "渠道把请求降级了" : "渠道返回了不同尺寸"}：请求 {downgrade.requested}，实际 {downgrade.actual}
+                                  </span>
+                                </div>
+                              )}
                               {/* 底部操作栏 — 始终可见 */}
                               <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-[var(--line)]/50 bg-[var(--surface)]/80">
                                 <button
@@ -893,7 +946,8 @@ export function GeneratorStudio({
                                 </div>
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ) : (

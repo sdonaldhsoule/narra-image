@@ -273,6 +273,8 @@ model GenerationImage {
   id               String         @id @default(cuid())
   jobId            String
   url              String
+  width            Int?
+  height           Int?
   showcaseStatus   ShowcaseStatus @default(PRIVATE)
   showPromptPublic Boolean        @default(false)
   submittedAt      DateTime?

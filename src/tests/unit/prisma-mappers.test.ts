@@ -31,6 +31,8 @@ describe("精选作品序列化", () => {
     showPromptPublic: true,
     submittedAt: new Date("2026-04-23T08:30:00.000Z"),
     url: "https://example.com/work.png",
+    width: null,
+    height: null,
   };
 
   it("提示词允许公开时返回真实 prompt", () => {

@@ -2,6 +2,11 @@ import "server-only";
 
 import OpenAI, { toFile } from "openai";
 
+import {
+  type ImageDimensions,
+  formatDimensions,
+  readImageDimensions,
+} from "@/lib/generation/image-dimensions";
 import { persistGeneratedImage } from "@/lib/storage/persist-generated-image";
 import { getBuiltInProviderConfig } from "@/lib/providers/built-in-provider";
 import { resolveGenerationProvider } from "@/lib/providers/resolve-provider";
@@ -13,6 +18,13 @@ import type {
   GenerationType,
   ProviderMode,
 } from "@/lib/types";
+
+export type GeneratedImageRecord = {
+  actualHeight: number | null;
+  actualSize: string | null;
+  actualWidth: number | null;
+  url: string;
+};
 
 type CustomProviderConfig = {
   apiKey: string;
@@ -136,22 +148,130 @@ export async function generateImages(input: GenerateImagesInput) {
   }
 
   return Promise.all(
-    items.map(async (item) => {
-      if (item.url) {
-        return persistGeneratedImage({
-          url: item.url,
-          userId: input.userId,
-        });
-      }
-
+    items.map(async (item): Promise<GeneratedImageRecord> => {
       if (item.b64_json) {
-        return persistGeneratedImage({
+        const buffer = Buffer.from(item.b64_json, "base64");
+        const dimensions =
+          extractDimensionsFromMetadata(item, result) ?? readImageDimensions(buffer);
+        const url = await persistGeneratedImage({
           b64Json: item.b64_json,
           userId: input.userId,
         });
+        return toRecord(url, dimensions);
+      }
+
+      if (item.url) {
+        const dimensions =
+          extractDimensionsFromMetadata(item, result) ??
+          (await fetchAndProbeDimensions(item.url));
+        const url = await persistGeneratedImage({
+          url: item.url,
+          userId: input.userId,
+        });
+        return toRecord(url, dimensions);
       }
 
       throw new Error("返回结果里没有可用图片");
     }),
   );
+}
+
+function toRecord(
+  url: string,
+  dimensions: ImageDimensions | null,
+): GeneratedImageRecord {
+  if (!dimensions) {
+    return { actualHeight: null, actualSize: null, actualWidth: null, url };
+  }
+
+  return {
+    actualHeight: dimensions.height,
+    actualSize: formatDimensions(dimensions),
+    actualWidth: dimensions.width,
+    url,
+  };
+}
+
+// 多家代理对实际生效尺寸的回传字段并不统一，这里把已知的几种形态都捞一下。
+function extractDimensionsFromMetadata(
+  item: unknown,
+  payload: unknown,
+): ImageDimensions | null {
+  return (
+    pickDimensionsFromObject(item) ?? pickDimensionsFromObject(payload) ?? null
+  );
+}
+
+function pickDimensionsFromObject(value: unknown): ImageDimensions | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+
+  const sizeField = record.size;
+  if (typeof sizeField === "string") {
+    const parsed = parseSizeString(sizeField);
+    if (parsed) return parsed;
+  }
+
+  const widthCandidate =
+    pickFiniteNumber(record.width) ??
+    pickFiniteNumber(record.actual_width) ??
+    pickFiniteNumber((record as { actualWidth?: unknown }).actualWidth);
+  const heightCandidate =
+    pickFiniteNumber(record.height) ??
+    pickFiniteNumber(record.actual_height) ??
+    pickFiniteNumber((record as { actualHeight?: unknown }).actualHeight);
+
+  if (widthCandidate && heightCandidate) {
+    return { height: heightCandidate, width: widthCandidate };
+  }
+
+  return null;
+}
+
+function pickFiniteNumber(value: unknown): number | null {
+  if (typeof value !== "number") return null;
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.round(value);
+}
+
+function parseSizeString(value: string): ImageDimensions | null {
+  const match = value.trim().match(/^(\d+)\s*[xX×]\s*(\d+)$/);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+  return { height, width };
+}
+
+// URL 模式下 b64 不在手里，需要拉一小段头部嗅探尺寸。
+// 受 PROBE_TIMEOUT_MS 与 PROBE_MAX_BYTES 限制，失败时静默返回 null，不阻塞主流程。
+const PROBE_TIMEOUT_MS = 5_000;
+const PROBE_MAX_BYTES = 64 * 1024;
+
+async function fetchAndProbeDimensions(url: string): Promise<ImageDimensions | null> {
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        cache: "no-store",
+        headers: { Range: `bytes=0-${PROBE_MAX_BYTES - 1}` },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!response.ok && response.status !== 206) return null;
+
+    const arrayBuffer = await response.arrayBuffer();
+    return readImageDimensions(Buffer.from(arrayBuffer));
+  } catch {
+    return null;
+  }
 }

@@ -22,6 +22,9 @@ export type SerializedGeneration = {
   generationType: "text_to_image" | "image_to_image";
   id: string;
   images: Array<{
+    actualHeight: number | null;
+    actualSize: string | null;
+    actualWidth: number | null;
     id: string;
     url: string;
   }>;
@@ -252,10 +255,18 @@ export function serializeGeneration(
     featuredAt: job.featuredAt?.toISOString() ?? null,
     generationType,
     id: job.id,
-    images: job.images.map((image) => ({
-      id: image.id,
-      url: image.url,
-    })),
+    images: job.images.map((image) => {
+      const width = "width" in image && typeof image.width === "number" ? image.width : null;
+      const height = "height" in image && typeof image.height === "number" ? image.height : null;
+      const actualSize = width && height ? `${width}x${height}` : null;
+      return {
+        actualHeight: height,
+        actualSize,
+        actualWidth: width,
+        id: image.id,
+        url: image.url,
+      };
+    }),
     model: job.model,
     moderation:
       "moderation" in job && typeof job.moderation === "string"
