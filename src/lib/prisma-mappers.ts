@@ -4,6 +4,7 @@ import {
   ProviderMode,
   Role,
   ShowcaseStatus,
+  type Conversation,
   type GenerationImage,
   type GenerationJob,
   type User,
@@ -14,6 +15,7 @@ import type { GenerationType as UiGenerationType } from "@/lib/types";
 import type { WorkShowcaseStatus } from "@/lib/work-showcase";
 
 export type SerializedGeneration = {
+  conversationId: string | null;
   count: number;
   createdAt: string;
   creditsSpent: number;
@@ -42,6 +44,26 @@ export type SerializedGeneration = {
   status: "pending" | "succeeded" | "failed";
   updatedAt: string;
 };
+
+export type SerializedConversation = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  generationIds: string[];
+};
+
+export function serializeConversation(
+  conversation: Conversation & { generations?: Array<Pick<GenerationJob, "id">> },
+): SerializedConversation {
+  return {
+    createdAt: conversation.createdAt.toISOString(),
+    generationIds: conversation.generations?.map((g) => g.id) ?? [],
+    id: conversation.id,
+    title: conversation.title,
+    updatedAt: conversation.updatedAt.toISOString(),
+  };
+}
 
 type WorkAuthorFields = Pick<User, "avatarUrl" | "id" | "nickname">;
 
@@ -248,6 +270,10 @@ export function serializeGeneration(
         : [];
 
   return {
+    conversationId:
+      "conversationId" in job && typeof job.conversationId === "string"
+        ? job.conversationId
+        : null,
     count: job.count,
     createdAt: job.createdAt.toISOString(),
     creditsSpent: job.creditsSpent,

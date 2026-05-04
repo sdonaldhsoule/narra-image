@@ -87,6 +87,7 @@ export async function parseGenerateRequest(request: Request | FormData) {
     return {
       ...body,
       channelId: toNullableString(formData.get("channelId")) || undefined,
+      conversationId: toNullableString(formData.get("conversationId")) || undefined,
       count: 1,
       image: images[0] ?? null,
       images,
@@ -113,6 +114,7 @@ export async function parseGenerateRequest(request: Request | FormData) {
   return {
     ...body,
     channelId: json.channelId as string | undefined,
+    conversationId: typeof json.conversationId === "string" ? json.conversationId : undefined,
     image: null,
     images: [],
   };

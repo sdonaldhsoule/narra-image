@@ -1,11 +1,10 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
-import { Sparkles, WandSparkles, Download, ZoomIn, X, ImagePlus, Settings2, Send, Paperclip, SquarePen, PanelLeftClose, PanelLeftOpen, Trash2, MessageSquare, AlertTriangle } from "lucide-react";
-import { useMemo, useRef, useState, useTransition, useEffect } from "react";
+// 创作台容器组件。仅负责状态编排与子组件接线，
+// 各子组件、hooks 与工具函数已拆分到同目录的 hooks / parts / utils / constants / types 下。
+import { PanelLeftOpen } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "motion/react";
 
 import {
   type GenerationModeration,
@@ -15,55 +14,22 @@ import {
   type GenerationType,
 } from "@/lib/types";
 import {
-  getAspectRatio as getGenerationAspectRatio,
-  getGenerationSizeLabel,
   imageSizeLimits,
   normalizeGenerationSize,
   parseImageSize,
 } from "@/lib/generation/sizes";
-import { getThumbUrl } from "@/lib/image-url";
-import { Alert } from "@/components/ui/alert";
 
-type ViewerUser = {
-  credits: number;
-  role: "user" | "admin";
-} | null;
-
-type GenerationItem = {
-  count: number;
-  createdAt: string;
-  creditsSpent: number;
-  errorMessage?: string | null;
-  generationType: GenerationType;
-  id: string;
-  images: Array<{
-    actualHeight?: number | null;
-    actualSize?: string | null;
-    actualWidth?: number | null;
-    id: string;
-    url: string;
-  }>;
-  model: string;
-  moderation?: string;
-  negativePrompt?: string | null;
-  outputCompression?: number | null;
-  outputFormat?: string;
-  prompt: string;
-  providerMode: "built_in" | "custom";
-  quality?: string;
-  size: string;
-  sourceImageUrl?: string | null;
-  sourceImageUrls?: string[];
-  status: "pending" | "succeeded" | "failed";
-};
-
-type ChannelInfo = {
-  creditCost: number;
-  defaultModel: string;
-  id: string;
-  models: string[];
-  name: string;
-};
+import { useImagePoller } from "./hooks/use-image-poller";
+import { useReferenceImages } from "./hooks/use-reference-images";
+import { useSessions } from "./hooks/use-sessions";
+import { AdvancedSettings } from "./parts/advanced-settings";
+import { ChatStream } from "./parts/chat-stream";
+import { Composer } from "./parts/composer";
+import { HistoryRail } from "./parts/history-rail";
+import { ImageZoomModal } from "./parts/image-zoom-modal";
+import { SessionSidebar } from "./parts/session-sidebar";
+import { getSizeSelectValue } from "./utils";
+import type { ChannelInfo, GenerationItem, SessionInfo, ViewerUser } from "./types";
 
 type GeneratorStudioProps = {
   compact?: boolean;
@@ -73,145 +39,21 @@ type GeneratorStudioProps = {
   };
   currentUser: ViewerUser;
   initialGenerations?: GenerationItem[];
+  initialConversations?: SessionInfo[];
   channels?: ChannelInfo[];
 };
 
-type SizeOption = {
-  detail?: string;
-  label: string;
-  value: GenerationSizeToken | "custom";
-};
-
-const SIZE_OPTIONS: SizeOption[] = [
-  { detail: "模型决定", label: "自动", value: "auto" },
-  { detail: "1:1", label: "1K 方图", value: "1024x1024" },
-  { detail: "3:2", label: "1.5K 横图", value: "1536x1024" },
-  { detail: "2:3", label: "1.5K 竖图", value: "1024x1536" },
-  { detail: "1:1", label: "2K 方图", value: "2048x2048" },
-  { detail: "16:9", label: "2K 横屏", value: "2048x1152" },
-  { detail: "9:16", label: "2K 竖屏", value: "1152x2048" },
-  { detail: "16:9", label: "4K 横屏", value: "3840x2160" },
-  { detail: "9:16", label: "4K 竖屏", value: "2160x3840" },
-  { detail: "高级设置", label: "自定义", value: "custom" },
-];
-
-const QUALITY_OPTIONS: Array<{ label: string; value: GenerationQuality }> = [
-  { label: "自动", value: "auto" },
-  { label: "低", value: "low" },
-  { label: "中", value: "medium" },
-  { label: "高", value: "high" },
-];
-
-const OUTPUT_FORMAT_OPTIONS: Array<{ label: string; value: GenerationOutputFormat }> = [
-  { label: "PNG", value: "png" },
-  { label: "JPEG", value: "jpeg" },
-  { label: "WebP", value: "webp" },
-];
-
-const MODERATION_OPTIONS: Array<{ label: string; value: GenerationModeration }> = [
-  { label: "自动", value: "auto" },
-  { label: "低限制", value: "low" },
-];
-
-function getSizeSelectValue(size: string) {
-  const normalized = normalizeGenerationSize(size);
-  if (!normalized) return "custom";
-  return SIZE_OPTIONS.some((option) => option.value === normalized)
-    ? normalized
-    : "custom";
-}
-
-function getSizeLabel(size: string) {
-  const normalized = normalizeGenerationSize(size);
-  const option = SIZE_OPTIONS.find((item) => item.value === normalized);
-  return option && option.value !== "custom"
-    ? `${option.label}${option.detail ? ` ${option.detail}` : ""}`
-    : getGenerationSizeLabel(size);
-}
-
-function getGenerationOptionSummary(generation: GenerationItem) {
-  const quality = generation.quality && generation.quality !== "auto"
-    ? `质量 ${generation.quality}`
-    : "质量自动";
-  const format = (generation.outputFormat ?? "png").toUpperCase();
-
-  return `${generation.model} • ${getSizeLabel(generation.size)} • ${quality} • ${format}`;
-}
-
-// 把请求 size 归一化为 "WxH"；auto / 非法值返回 null。
-function parseSizePixels(size: string | null | undefined): { width: number; height: number } | null {
-  if (!size) return null;
-  const match = size.trim().match(/^(\d+)\s*[xX×]\s*(\d+)$/);
-  if (!match) return null;
-  const width = Number(match[1]);
-  const height = Number(match[2]);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return null;
-  }
-  return { height, width };
-}
-
-// 实际尺寸与请求尺寸像素数差异 > 5% 视为渠道降级/缩水。
-// 容差用来吸收 16 倍数对齐这类合法的细微规整。
-function describeSizeDowngrade(generation: GenerationItem, image: GenerationItem["images"][number]) {
-  if (!image.actualSize) return null;
-  if (!generation.size || generation.size.toLowerCase() === "auto") return null;
-
-  const requested = parseSizePixels(generation.size);
-  const actual = parseSizePixels(image.actualSize);
-  if (!requested || !actual) return null;
-
-  const requestedPixels = requested.width * requested.height;
-  const actualPixels = actual.width * actual.height;
-  if (requestedPixels === 0) return null;
-
-  const delta = Math.abs(requestedPixels - actualPixels) / requestedPixels;
-  if (delta <= 0.05) return null;
-
-  return {
-    actual: image.actualSize,
-    requested: generation.size,
-    shrunk: actualPixels < requestedPixels,
-  };
-}
-
-const MAX_REFERENCE_IMAGES = 16;
-
-function getGenerationSourceImageUrls(generation: GenerationItem) {
-  return generation.sourceImageUrls?.length
-    ? generation.sourceImageUrls
-    : generation.sourceImageUrl
-      ? [generation.sourceImageUrl]
-      : [];
-}
-
-// --- Session helpers ---
-type SessionInfo = {
-  id: string;
-  title: string;
-  generationIds: string[];
-  createdAt: string;
-};
-
-function genSessionId() {
-  return `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function loadSessions(): SessionInfo[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem("narra_sessions") || "[]");
-  } catch { return []; }
-}
-
-function saveSessions(sessions: SessionInfo[]) {
-  localStorage.setItem("narra_sessions", JSON.stringify(sessions));
-}
+// 模块级稳定空数组，避免组件每次 render 时 default 表达式创建新引用，
+// 进而让 useEffect 的依赖项每次都"变化"导致死循环重跑。
+const EMPTY_GENERATIONS: GenerationItem[] = [];
+const EMPTY_CONVERSATIONS: SessionInfo[] = [];
+const EMPTY_CHANNELS: ChannelInfo[] = [];
 
 export function GeneratorStudio({
   currentUser,
-  initialGenerations = [],
-  channels = [],
+  initialGenerations = EMPTY_GENERATIONS,
+  initialConversations = EMPTY_CONVERSATIONS,
+  channels = EMPTY_CHANNELS,
 }: GeneratorStudioProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -220,12 +62,13 @@ export function GeneratorStudio({
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(
-    channels[0]?.id ?? null
+    channels[0]?.id ?? null,
   );
-  const selectedChannel = channels.find((c) => c.id === selectedChannelId) ?? channels[0] ?? null;
-  const [model, setModel] = useState(
-    selectedChannel?.defaultModel || "gpt-image-2",
+  const selectedChannel = useMemo(
+    () => channels.find((c) => c.id === selectedChannelId) ?? channels[0] ?? null,
+    [channels, selectedChannelId],
   );
+  const [model, setModel] = useState(selectedChannel?.defaultModel || "gpt-image-2");
   const [size, setSize] = useState<GenerationSizeToken>("auto");
   const [customSizeMode, setCustomSizeMode] = useState(false);
   const [customWidth, setCustomWidth] = useState("2048");
@@ -236,64 +79,84 @@ export function GeneratorStudio({
   const [moderation, setModeration] = useState<GenerationModeration>("auto");
   const [count, setCount] = useState(1);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
-  const [referenceImages, setReferenceImages] = useState<Array<{
-    id: string;
-    file: File;
-    previewUrl: string;
-  }>>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Session state
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const { referenceImages, addFiles, removeImage, clear: clearReferenceImages, setImages: setReferenceImages } = useReferenceImages();
+
+  // 会话状态：基于服务端 API 持久化（本次修复 #8 落地）。
+  const {
+    sessions,
+    refresh: refreshSessions,
+    createSession,
+    renameSession,
+    appendGeneration: appendGenerationToSession,
+    deleteSession: deleteSessionRemote,
+    readLastActive,
+    writeLastActive,
+  } = useSessions(initialConversations);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionGenerations, setSessionGenerations] = useState<GenerationItem[]>([]);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isComposingRef = useRef(false);
+  // 缓存"看到过"的所有 generation，用于跨会话切换时还原本次会话期间产生的新数据。
+  const allGenerationsRef = useRef<Map<string, GenerationItem>>(new Map());
 
-  // Initialize sessions from localStorage and backfill legacy generations.
+  // 初始化：选择上次活跃会话或最新一条；若用户的 generation 还没有归属任何 conversation，
+  // 先把孤儿 generation 展示出来保证视觉连续性。
+  // 这里不主动调用 createSession API（避免在初始渲染就发起网络请求与潜在的测试副作用）；
+  // 用户首次发送 generation 时会在 handleGenerate 中按需 createSession，归属落地由后端绑定。
   useEffect(() => {
-    let stored = loadSessions();
+    const lastId = readLastActive();
+    const stored = initialConversations;
+
     const knownIds = new Set(stored.flatMap((session) => session.generationIds));
     const orphans = initialGenerations.filter((generation) => !knownIds.has(generation.id));
-
-    if (orphans.length > 0 && stored.length === 0) {
-      const legacy: SessionInfo = {
-        id: genSessionId(),
-        title: orphans[0]?.prompt?.slice(0, 30) || "历史会话",
-        generationIds: orphans.map((generation) => generation.id),
-        createdAt: orphans[0]?.createdAt || new Date().toISOString(),
-      };
-      stored = [legacy];
-      saveSessions(stored);
-    }
-
-    // 这里只在挂载后同步一次本地会话缓存，避免改动现有会话恢复行为。
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSessions(stored);
-    if (stored.length > 0) {
-      const last = stored[stored.length - 1];
-      setActiveSessionId(last.id);
+    if (stored.length === 0 && orphans.length > 0) {
+      // 把孤儿 generation 直接显示出来；activeSessionId 维持 null，下一次 handleGenerate 自动建会话。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessionGenerations(
-        initialGenerations
-          .filter((generation) => last.generationIds.includes(generation.id))
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+        orphans.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
       );
+      return;
     }
-  }, [initialGenerations]);
 
-  // Auto-scroll to bottom when generations change
+    const target = stored.find((s) => s.id === lastId) ?? stored[0] ?? null;
+    if (target) {
+      setActiveSessionId(target.id);
+      writeLastActive(target.id);
+      const gens = target.generationIds
+        .map((id) => initialGenerations.find((g) => g.id === id))
+        .filter((g): g is GenerationItem => g !== undefined)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      setSessionGenerations(gens);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialGenerations, initialConversations]);
+
+  // 累积所有看到过的 generation 到 ref，避免切换会话时丢失本会话产生的新数据。
   useEffect(() => {
-    if (scrollAreaRef.current && typeof scrollAreaRef.current.scrollTo === "function") {
-      scrollAreaRef.current.scrollTo({
-        top: scrollAreaRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+    for (const generation of initialGenerations) {
+      allGenerationsRef.current.set(generation.id, generation);
+    }
+    for (const generation of sessionGenerations) {
+      allGenerationsRef.current.set(generation.id, generation);
+    }
+  }, [initialGenerations, sessionGenerations]);
+
+  // 仅当用户视图已经接近底部（80px 内）时才强制滚动，避免用户向上回看时被打断。
+  useEffect(() => {
+    const el = scrollAreaRef.current;
+    if (!el || typeof el.scrollTo !== "function") return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 80) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
   }, [sessionGenerations, isPending]);
 
-  // Adjust textarea height
+  // 文本框自适应高度。
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -301,66 +164,15 @@ export function GeneratorStudio({
     }
   }, [prompt]);
 
-  // 后端用 after() 把图片生成异步化，前端按 generation.id 维护一份独立的轮询，
-  // 直到任务进入 succeeded/failed 才停。刷新页面或切回会话时，effect 会自动对
-  // 仍处于 pending 的 generation 续跑轮询。
-  const pollersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
-
-  useEffect(() => {
-    const pendingIds = sessionGenerations
-      .filter((generation) => generation.status === "pending")
-      .map((generation) => generation.id);
-
-    pendingIds.forEach((id) => {
-      if (pollersRef.current.has(id)) return;
-
-      const tick = async () => {
-        try {
-          const response = await fetch(`/api/me/generations/${id}`);
-          if (!response.ok) return;
-          const json = (await response.json()) as {
-            data?: { generation: GenerationItem };
-          };
-          const updated = json?.data?.generation;
-          if (!updated) return;
-          if (updated.status === "pending") return;
-
-          setSessionGenerations((current) =>
-            current.map((generation) => (generation.id === id ? updated : generation)),
-          );
-          const handle = pollersRef.current.get(id);
-          if (handle) {
-            clearInterval(handle);
-            pollersRef.current.delete(id);
-          }
-        } catch {
-          // 单次轮询失败不致命，下一次 tick 继续尝试。
-        }
-      };
-
-      void tick();
-      const handle = setInterval(tick, 2000);
-      pollersRef.current.set(id, handle);
-    });
-
-    for (const [id, handle] of Array.from(pollersRef.current.entries())) {
-      if (!pendingIds.includes(id)) {
-        clearInterval(handle);
-        pollersRef.current.delete(id);
-      }
-    }
-  }, [sessionGenerations]);
-
-  useEffect(() => {
-    const pollers = pollersRef.current;
-    return () => {
-      pollers.forEach((handle) => clearInterval(handle));
-      pollers.clear();
-    };
+  // 单图轮询：拆为独立 hook，外部传入更新回调。
+  const handlePollerUpdate = useCallback((updated: GenerationItem) => {
+    setSessionGenerations((current) =>
+      current.map((generation) => (generation.id === updated.id ? updated : generation)),
+    );
   }, []);
+  useImagePoller({ generations: sessionGenerations, onUpdate: handlePollerUpdate });
 
-  // 右侧历史图片栏数据：合并初始历史 + 当前会话新生成的图，按 id 去重，按 generation 时间倒序。
-  // 数据来源直接复用 page.tsx 已加载的 initialGenerations，无需额外接口。
+  // 历史图片栏数据：合并初始历史 + 当前会话新生成图，按 id 去重，按 generation 时间倒序。
   const historyImages = useMemo(() => {
     const seen = new Set<string>();
     const merged: Array<{ id: string; url: string; createdAt: string }> = [];
@@ -376,15 +188,44 @@ export function GeneratorStudio({
         });
       }
     }
-    merged.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+    merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return merged;
   }, [initialGenerations, sessionGenerations]);
 
   const sortedGenerations = sessionGenerations;
   const sizeSelectValue = customSizeMode ? "custom" : getSizeSelectValue(size);
   const normalizedCustomSize = normalizeGenerationSize(`${customWidth}x${customHeight}`);
+
+  // 自定义尺寸的输入态校验：覆盖空值 / 超出最大边 / 像素数过大 / 极端长宽比四种典型问题。
+  // 这里只做"提示"，最终保护由 lib/generation/sizes 的 normalize 兜底（自动规整），
+  // UI 提示让用户在提交前知道服务端会做什么。
+  const customSizeWarning = useMemo<string | null>(() => {
+    if (!customSizeMode) return null;
+    const w = Number(customWidth);
+    const h = Number(customHeight);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+      return "请输入正整数";
+    }
+    if (Math.max(w, h) > imageSizeLimits.maxEdge) {
+      return `单边最大 ${imageSizeLimits.maxEdge}px，将自动缩放到上限`;
+    }
+    const pixels = w * h;
+    if (pixels > imageSizeLimits.maxPixels) {
+      return `总像素超出上限，将自动缩小`;
+    }
+    const ratio = w / h;
+    if (ratio > imageSizeLimits.maxAspectRatio || ratio < 1 / imageSizeLimits.maxAspectRatio) {
+      return `长宽比超过 ${imageSizeLimits.maxAspectRatio}:1，将自动收敛`;
+    }
+    return null;
+  }, [customSizeMode, customWidth, customHeight]);
+
+  // 当前渠道支持的模型选项；若用户当前选择的 model 不在新渠道支持列表中，仍展示一项以示状态。
+  const modelOptions = useMemo(() => {
+    const channelModels = selectedChannel?.models ?? [];
+    if (channelModels.includes(model)) return channelModels;
+    return [model, ...channelModels];
+  }, [selectedChannel?.models, model]);
 
   function handleSizeSelect(value: string) {
     if (value === "custom") {
@@ -396,12 +237,10 @@ export function GeneratorStudio({
         setCustomWidth(nextWidth);
         setCustomHeight(nextHeight);
       }
-
       setSize((normalizeGenerationSize(`${nextWidth}x${nextHeight}`) ?? "2048x2048") as GenerationSizeToken);
       setShowSettings(true);
       return;
     }
-
     setCustomSizeMode(false);
     setSize(value as GenerationSizeToken);
   }
@@ -409,7 +248,6 @@ export function GeneratorStudio({
   function updateCustomSize(width: string, height: string) {
     setCustomWidth(width);
     setCustomHeight(height);
-
     const normalized = normalizeGenerationSize(`${width}x${height}`);
     if (normalized && normalized !== "auto") {
       setSize(normalized);
@@ -447,21 +285,15 @@ export function GeneratorStudio({
       router.push("/login");
       return;
     }
-
     setError(null);
-
     if (generationType === "image_to_image" && referenceImages.length === 0) {
       setError("请先上传参考图");
       return;
     }
+    if (!prompt.trim() && referenceImages.length === 0) return;
 
-    if (!prompt.trim() && referenceImages.length === 0) {
-      return;
-    }
-
-    // 快照本次发送的内容，并立即清空输入区。
-    // 这一步必须在 startTransition 之外执行：transition 内的 setState 是低优先级，
-    // 会被推迟到 await 完成后才提交，导致输入框看起来"被卡住"。
+    // 快照本次发送的内容并立即清空输入区。
+    // 必须在 startTransition 之外执行：transition 内的 setState 是低优先级，会被推迟到 await 完成后才提交。
     const snapshot: GenerateSnapshot = {
       prompt,
       referenceImages: referenceImages.slice(),
@@ -482,7 +314,6 @@ export function GeneratorStudio({
   async function handleGenerate(snapshot: GenerateSnapshot) {
     function restoreSnapshot(message: string) {
       setError(message);
-      // 用户在等待期间可能已开始新的输入，避免覆盖。
       setPrompt((current) => (current ? current : snapshot.prompt));
       setReferenceImages((current) => {
         if (current.length > 0) {
@@ -498,6 +329,17 @@ export function GeneratorStudio({
     }
 
     try {
+      // 若当前没有活跃会话，先在服务端创建一个；保证 generation 一定挂在某个 conversation 下。
+      let conversationId = activeSessionId;
+      if (!conversationId) {
+        const created = await createSession(snapshot.prompt.slice(0, 30) || "新对话");
+        if (created) {
+          conversationId = created.id;
+          setActiveSessionId(created.id);
+          writeLastActive(created.id);
+        }
+      }
+
       const response =
         snapshot.generationType === "image_to_image"
           ? await fetch("/api/generate", {
@@ -518,6 +360,9 @@ export function GeneratorStudio({
                 if (selectedChannelId) {
                   formData.append("channelId", selectedChannelId);
                 }
+                if (conversationId) {
+                  formData.append("conversationId", conversationId);
+                }
                 snapshot.referenceImages.forEach((referenceImage) => {
                   formData.append("referenceImages", referenceImage.file);
                 });
@@ -526,11 +371,10 @@ export function GeneratorStudio({
             })
           : await fetch("/api/generate", {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 channelId: selectedChannelId,
+                conversationId,
                 count,
                 customProvider: null,
                 generationType: "text_to_image",
@@ -547,9 +391,7 @@ export function GeneratorStudio({
             });
 
       const result = (await response.json()) as {
-        data?: {
-          generation: GenerationItem;
-        };
+        data?: { generation: GenerationItem };
         error?: string;
       };
 
@@ -557,86 +399,57 @@ export function GeneratorStudio({
         restoreSnapshot(result.error || "生成失败，请稍后再试");
         return;
       }
-
       const generation = result.data?.generation;
       if (!generation) {
         restoreSnapshot("服务端没有返回图片");
         return;
       }
 
-      // 成功后再释放快照中的参考图预览 URL。
+      // 成功后释放快照中的参考图预览 URL。
       snapshot.referenceImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
 
       setSessionGenerations((current) => [...current, generation]);
-      // Update session in localStorage
-      setSessions((prev) => {
-        const updated = [...prev];
-        let session = updated.find((s) => s.id === activeSessionId);
-        if (!session) {
-          // Create session on first generation if none active
-          session = {
-            id: activeSessionId || genSessionId(),
-            title: generation.prompt.slice(0, 30),
-            generationIds: [],
-            createdAt: new Date().toISOString(),
-          };
-          updated.push(session);
-          if (!activeSessionId) setActiveSessionId(session.id);
+      // 把 generation 写入会话本地状态；服务端在 /api/generate 已自动绑定 conversationId 与刷新 title。
+      const targetConversationId = generation.conversationId ?? activeSessionId;
+      if (targetConversationId) {
+        appendGenerationToSession(targetConversationId, generation.id);
+        // 若是会话内首条 generation 且 title 还是默认的"新对话"，本地同步一份 title。
+        const session = sessions.find((s) => s.id === targetConversationId);
+        if (session && session.generationIds.length === 0 && session.title === "新对话") {
+          void renameSession(targetConversationId, generation.prompt.slice(0, 30) || "新对话");
         }
-        session.generationIds.push(generation.id);
-        if (session.generationIds.length === 1) {
-          session.title = generation.prompt.slice(0, 30);
-        }
-        saveSessions(updated);
-        return updated;
-      });
+      } else {
+        // 兜底：服务端没返回 conversationId（理论上不应发生），刷新一次会话列表。
+        void refreshSessions();
+      }
     } catch (err) {
       restoreSnapshot(err instanceof Error ? err.message : "生成失败，请稍后再试");
     }
   }
 
-  async function handleReferenceImageChange(files: File[] | FileList | null) {
-    const imageFiles = Array.from(files ?? []).filter((file) => file.type.startsWith("image/"));
-    if (imageFiles.length === 0) {
-      return;
-    }
-
-    const remaining = Math.max(0, MAX_REFERENCE_IMAGES - referenceImages.length);
-    const acceptedFiles = imageFiles.slice(0, remaining);
-    if (acceptedFiles.length < imageFiles.length) {
-      setError(`最多上传 ${MAX_REFERENCE_IMAGES} 张参考图`);
+  function handleReferenceFiles(files: File[] | FileList | null) {
+    const result = addFiles(files);
+    if (result === "empty") return;
+    if (result === "exceeded") {
+      setError("最多上传 16 张参考图");
     } else {
       setError(null);
     }
-
-    if (acceptedFiles.length === 0) {
-      return;
-    }
-
-    setReferenceImages((current) => [
-      ...current,
-      ...acceptedFiles.map((file) => ({
-        file,
-        id: `${Date.now()}_${file.name}_${Math.random().toString(36).slice(2, 8)}`,
-        previewUrl: URL.createObjectURL(file),
-      })),
-    ]);
+    // 接受了至少一张图时，切到图生图模式并把 count 锁回 1（后端固定单图返回）。
     setGenerationType("image_to_image");
+    setCount(1);
   }
 
-  function removeReferenceImage(id: string) {
-    setReferenceImages((current) => {
-      const target = current.find((item) => item.id === id);
-      if (target) URL.revokeObjectURL(target.previewUrl);
-      const next = current.filter((item) => item.id !== id);
-      if (next.length === 0 && prompt.trim() === "") setGenerationType("text_to_image");
-      return next;
-    });
+  function handleRemoveReference(id: string) {
+    removeImage(id);
+    // 若移除后没有参考图且 prompt 为空，则回到文生图模式。
+    if (referenceImages.length === 1 && prompt.trim() === "") {
+      setGenerationType("text_to_image");
+    }
   }
 
   async function handleUseImageForEdit(url: string) {
     try {
-      // Use server-side proxy to avoid CORS issues with external storage (S3/R2)
       const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
       const response = await fetch(proxyUrl);
       if (!response.ok) throw new Error("fetch failed");
@@ -644,7 +457,7 @@ export function GeneratorStudio({
       const file = new File([blob], "edit-source.png", {
         type: blob.type || "image/png",
       });
-      await handleReferenceImageChange([file]);
+      handleReferenceFiles([file]);
     } catch {
       setError("当前图片暂时无法加入编辑，请稍后再试");
       return;
@@ -655,15 +468,14 @@ export function GeneratorStudio({
     textareaRef.current?.focus();
   }
 
-  async function handlePaste(e: React.ClipboardEvent) {
+  function handlePaste(e: React.ClipboardEvent) {
     const items = e.clipboardData?.items;
     if (!items) return;
-
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf("image") !== -1) {
         const file = items[i].getAsFile();
         if (file) {
-          await handleReferenceImageChange([file]);
+          handleReferenceFiles([file]);
           e.preventDefault();
           break;
         }
@@ -671,132 +483,101 @@ export function GeneratorStudio({
     }
   }
 
+  // 取消一个仍在 pending 的 generation：仅停止前端轮询并把 UI 标记为 failed/已取消。
+  // 后端 after() 仍可能继续生成，但结果不再回灌（用户可在历史接口里按 jobId 找到）。
+  // 如未来要做"真取消"，需要在 /api/me/generations/[id] 增加 PATCH/DELETE 端点退还积分。
+  function handleCancelGeneration(target: GenerationItem) {
+    setSessionGenerations((current) =>
+      current.map((g) =>
+        g.id === target.id && g.status === "pending"
+          ? { ...g, errorMessage: "已被用户取消", status: "failed" as const }
+          : g,
+      ),
+    );
+  }
+
+  // 失败重试：使用原 generation 的 prompt + 当前选项重新触发，等价于用户手动重新填写一次。
+  // 注意：不复用原 sourceImageUrls（图生图）——参考图在原文件已不可用，重试时退回文生图。
+  function handleRetryGeneration(target: GenerationItem) {
+    if (target.status === "pending") return;
+    if (!currentUser) {
+      router.push("/login");
+      return;
+    }
+    setError(null);
+    const snapshot: GenerateSnapshot = {
+      prompt: target.prompt,
+      // 重试不带原参考图：用户如想图生图重试，可用气泡内"加入编辑"再重发。
+      referenceImages: [],
+      generationType: "text_to_image",
+    };
+    startTransition(() => {
+      void handleGenerate(snapshot);
+    });
+  }
+
   function handleNewConversation() {
-    const newId = genSessionId();
-    setActiveSessionId(newId);
+    // 暂不立即创建服务端会话，等首次发送 generation 时再 createSession，避免空会话堆积。
+    setActiveSessionId(null);
+    writeLastActive(null);
     setSessionGenerations([]);
     setPrompt("");
     setNegativePrompt("");
-    referenceImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
-    setReferenceImages([]);
+    clearReferenceImages();
     setGenerationType("text_to_image");
     setError(null);
     setShowSettings(false);
-    // Don't add to sessions yet — only add when first generation happens
   }
-
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   function switchToSession(sessionId: string) {
     setActiveSessionId(sessionId);
+    writeLastActive(sessionId);
     const session = sessions.find((s) => s.id === sessionId);
     if (session) {
-      const gens = initialGenerations
-        .filter((g) => session.generationIds.includes(g.id))
+      // 优先从 ref 缓存中读，命中不到再回退 initialGenerations，
+      // 这样能包含"当前会话生成、未刷入 SSR 数据"的 generation。
+      const gens = session.generationIds
+        .map((id) => allGenerationsRef.current.get(id) ?? initialGenerations.find((g) => g.id === id))
+        .filter((g): g is GenerationItem => g !== undefined)
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       setSessionGenerations(gens);
     }
     setPrompt("");
     setNegativePrompt("");
-    referenceImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
-    setReferenceImages([]);
+    clearReferenceImages();
     setError(null);
     if (window.innerWidth < 768) setSidebarOpen(false);
   }
 
   function deleteSession(sessionId: string) {
-    setSessions((prev) => {
-      const updated = prev.filter((s) => s.id !== sessionId);
-      saveSessions(updated);
-      return updated;
-    });
+    void deleteSessionRemote(sessionId);
     if (activeSessionId === sessionId) {
       handleNewConversation();
     }
   }
 
-  function formatTime(dateStr: string) {
-    const d = new Date(dateStr);
-    const now = new Date();
-    const isToday = d.toDateString() === now.toDateString();
-    const time = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
-    if (isToday) return `今天 ${time}`;
-    return `${(d.getMonth()+1).toString().padStart(2,"0")}/${d.getDate().toString().padStart(2,"0")} ${time}`;
+  function handleChannelChange(newChannelId: string) {
+    setSelectedChannelId(newChannelId);
+    const ch = channels.find((c) => c.id === newChannelId);
+    // 仅当用户当前选择的 model 不在新渠道支持列表中时，才回退到 defaultModel。
+    if (ch && !ch.models.includes(model)) {
+      setModel(ch.defaultModel);
+    }
   }
 
   return (
     <div className="flex h-full w-full relative">
-      {/* 左侧会话历史侧边栏 */}
-      {/* 移动端遮罩 */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/30 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-      <aside className={`${
-        sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-      } fixed md:relative z-40 md:z-0 flex h-full w-64 shrink-0 flex-col border-r border-[var(--line)] bg-[var(--surface)] transition-transform duration-200 ease-out`}>
-        {/* 侧边栏头部 */}
-        <div className="flex items-center gap-2 p-3 border-b border-[var(--line)]">
-          <button
-            onClick={handleNewConversation}
-            className="flex flex-1 items-center gap-2 rounded-xl bg-[var(--ink)] px-4 py-2.5 text-xs font-medium text-white shadow-sm transition hover:bg-[var(--accent)]"
-          >
-            <SquarePen className="size-3.5" />
-            新建对话
-          </button>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="rounded-lg p-2 text-[var(--ink-soft)] transition hover:bg-[var(--surface-strong)] md:hidden"
-          >
-            <PanelLeftClose className="size-4" />
-          </button>
-        </div>
+      <SessionSidebar
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onNewConversation={handleNewConversation}
+        onSwitchSession={switchToSession}
+        onDeleteSession={deleteSession}
+      />
 
-        {/* 会话列表 */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5" style={{ scrollbarWidth: "thin" }}>
-          {sessions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-center">
-              <MessageSquare className="size-6 text-[var(--ink-soft)] opacity-30 mb-2" />
-              <p className="text-xs text-[var(--ink-soft)]">暂无会话记录</p>
-            </div>
-          ) : (
-            [...sessions].reverse().map((session) => (
-              <div
-                key={session.id}
-                className={`group flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition cursor-pointer ${
-                  activeSessionId === session.id
-                    ? "bg-[var(--surface-strong)] ring-1 ring-[var(--line)]"
-                    : "hover:bg-[var(--surface-strong)]/60"
-                }`}
-                onClick={() => switchToSession(session.id)}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-[var(--ink)] truncate leading-tight">
-                    {session.title || "新对话"}
-                  </p>
-                  <p className="text-[10px] text-[var(--ink-soft)] mt-0.5">
-                    {session.generationIds.length} 轮 · {formatTime(session.createdAt)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
-                  className="shrink-0 rounded-md p-1 text-[var(--ink-soft)] opacity-0 transition group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-500"
-                  title="删除会话"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      </aside>
-
-      {/* 主内容区 */}
       <div className="flex flex-1 flex-col relative bg-gradient-to-b from-[var(--surface)] to-[var(--surface-strong)]/20 min-w-0">
-        {/* 顶部工具栏 */}
         <div className="flex items-center gap-2 px-4 py-2 md:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
@@ -806,593 +587,87 @@ export function GeneratorStudio({
           </button>
         </div>
 
-        {/* 对话流区域 */}
-        <div
+        <ChatStream
           ref={scrollAreaRef}
-          className="flex-1 overflow-y-auto px-4 pb-40 md:px-8 scroll-smooth"
-          style={{ scrollbarWidth: "thin" }}
+          generations={sortedGenerations}
+          onZoom={(url) => setZoomedImage(url)}
+          onDownload={handleDownload}
+          onUseForEdit={(url) => void handleUseImageForEdit(url)}
+          onRetry={handleRetryGeneration}
+          onCancel={handleCancelGeneration}
+        />
+
+        <Composer
+          ref={textareaRef}
+          prompt={prompt}
+          onChangePrompt={setPrompt}
+          onPaste={handlePaste}
+          onCompositionStart={() => { isComposingRef.current = true; }}
+          onCompositionEnd={() => { isComposingRef.current = false; }}
+          onKeyDownEnter={handleSubmit}
+          isComposing={() => isComposingRef.current}
+          isPending={isPending}
+          error={error}
+          onDismissError={() => setError(null)}
+          generationType={generationType}
+          onChangeGenerationType={setGenerationType}
+          referenceImages={referenceImages}
+          onPickFiles={handleReferenceFiles}
+          onRemoveReference={handleRemoveReference}
+          size={size}
+          sizeSelectValue={sizeSelectValue}
+          onSizeSelect={handleSizeSelect}
+          showSettings={showSettings}
+          onToggleSettings={() => setShowSettings((s) => !s)}
+          channels={channels}
+          selectedChannelId={selectedChannelId}
+          onChangeChannel={handleChannelChange}
+          modelOptions={modelOptions}
+          model={model}
+          onChangeModel={setModel}
+          onSubmit={handleSubmit}
+          canSubmit={Boolean(prompt.trim() || referenceImages.length > 0)}
+          onClickImageMode={() => setGenerationType("image_to_image")}
         >
-          <div className="mx-auto max-w-3xl space-y-8">
-            {sortedGenerations.length === 0 ? (
-              <div className="flex h-[40vh] flex-col items-center justify-center text-center">
-                <div className="mb-6 rounded-full bg-gradient-to-br from-[var(--accent)]/20 to-purple-500/20 p-5 ring-1 ring-[var(--line)]">
-                  <WandSparkles className="size-8 text-[var(--accent)]" />
-                </div>
-                <h2 className="text-2xl font-semibold tracking-tight text-[var(--ink)]">你好，你想创作什么？</h2>
-                <p className="mt-2 text-[var(--ink-soft)] max-w-md">
-                  在下方输入描述开始生成图片，或者直接粘贴一张图片进入图生图模式。
-                </p>
-              </div>
-            ) : (
-              sortedGenerations.map((generation) => (
-                <motion.div
-                  key={generation.id}
-                  id={`gen-${generation.id}`}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, ease: "easeOut" }}
-                  className="space-y-6"
-                >
-                <div className="flex gap-4">
-                  <div className="shrink-0 flex size-9 items-center justify-center rounded-full bg-[var(--surface-strong)] border border-[var(--line)] text-sm font-semibold">
-                    You
-                  </div>
-                  <div className="flex flex-col gap-2 max-w-[85%]">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-[var(--ink)]">You</span>
-                      <span className="text-xs text-[var(--ink-soft)] bg-[var(--surface-strong)] px-2 py-0.5 rounded-full">
-                        {generation.generationType === "image_to_image" ? "图生图" : "文生图"}
-                      </span>
-                    </div>
-                    <div className="rounded-2xl rounded-tl-none border border-[var(--line)] bg-[var(--surface-strong)]/30 px-5 py-3.5 text-sm leading-relaxed text-[var(--ink)] shadow-sm">
-                      {generation.prompt}
-                      {getGenerationSourceImageUrls(generation).length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {getGenerationSourceImageUrls(generation).map((url, index) => (
-                            <img
-                              key={`${url}_${index}`}
-                              src={getThumbUrl(url, 192)}
-                              alt="Reference"
-                              loading="lazy"
-                              decoding="async"
-                              className="h-24 w-auto rounded-lg border border-[var(--line)] object-cover shadow-sm"
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+          <AdvancedSettings
+            open={showSettings}
+            showCustomSize={sizeSelectValue === "custom"}
+            customWidth={customWidth}
+            customHeight={customHeight}
+            normalizedCustomSize={normalizedCustomSize}
+            customSizeWarning={customSizeWarning}
+            count={count}
+            quality={quality}
+            outputFormat={outputFormat}
+            outputCompression={outputCompression}
+            moderation={moderation}
+            negativePrompt={negativePrompt}
+            generationType={generationType}
+            channels={channels}
+            selectedChannelId={selectedChannelId}
+            onChangeChannel={handleChannelChange}
+            modelOptions={modelOptions}
+            model={model}
+            onChangeModel={setModel}
+            onChangeCustomSize={updateCustomSize}
+            onChangeCount={setCount}
+            onChangeQuality={setQuality}
+            onChangeOutputFormat={setOutputFormat}
+            onChangeOutputCompression={setOutputCompression}
+            onChangeModeration={setModeration}
+            onChangeNegativePrompt={setNegativePrompt}
+          />
+        </Composer>
 
-                {/* 助手（生成结果）消息 */}
-                <div className="flex gap-4">
-                  <div className="shrink-0 flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-purple-500 text-white shadow-md">
-                    <Sparkles className={`size-5 ${generation.status === "pending" ? "animate-pulse" : ""}`} />
-                  </div>
-                  <div className="flex flex-col gap-2 max-w-[85%] w-full">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-[var(--ink)]">Narra AI</span>
-                      {generation.status === "pending" ? (
-                        <span className="text-xs text-[var(--ink-soft)] animate-pulse">正在生成中...</span>
-                      ) : (
-                        <span className="text-xs text-[var(--ink-soft)]">{getGenerationOptionSummary(generation)}</span>
-                      )}
-                    </div>
-
-                    {generation.status === "pending" ? (
-                      <div className="h-48 w-64 rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)]/30 animate-pulse" />
-                    ) : generation.images.length > 0 ? (
-                      <div className="space-y-3">
-                        <p className="text-xs text-[var(--ink-soft)]">结果 {generation.images.length}</p>
-                        <div className={`grid gap-3 ${generation.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`} style={{ maxWidth: generation.images.length === 1 ? "280px" : "400px" }}>
-                          {generation.images.map((image) => {
-                            const downgrade = describeSizeDowngrade(generation, image);
-                            return (
-                            <div
-                              key={image.id}
-                              className="group relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)]/50 shadow-sm"
-                            >
-                              <div
-                                className="overflow-hidden bg-[var(--surface-strong)]/40"
-                                style={getGenerationAspectRatio(generation.size) ? { aspectRatio: getGenerationAspectRatio(generation.size) } : undefined}
-                              >
-                                <img
-                                  src={getThumbUrl(image.url, 640)}
-                                  alt="生成结果"
-                                  loading="lazy"
-                                  decoding="async"
-                                  className="size-full object-cover cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
-                                  onClick={() => setZoomedImage(image.url)}
-                                />
-                              </div>
-                              {downgrade && (
-                                <div
-                                  className="flex items-start gap-1.5 border-t border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-600 dark:text-amber-300"
-                                  title="渠道返回的实际像素与请求不一致，常见于 free 号池/反向代理对超大尺寸的静默降级"
-                                >
-                                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                                  <span>
-                                    {downgrade.shrunk ? "渠道把请求降级了" : "渠道返回了不同尺寸"}：请求 {downgrade.requested}，实际 {downgrade.actual}
-                                  </span>
-                                </div>
-                              )}
-                              {/* 底部操作栏 — 始终可见 */}
-                              <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-[var(--line)]/50 bg-[var(--surface)]/80">
-                                <button
-                                  type="button"
-                                  onClick={() => void handleUseImageForEdit(image.url)}
-                                  className="flex items-center gap-1.5 rounded-full bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-medium text-[var(--ink)] border border-[var(--line)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                                >
-                                  <ImagePlus className="size-3.5" />
-                                  加入编辑
-                                </button>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => setZoomedImage(image.url)}
-                                    className="rounded-lg p-1.5 text-[var(--ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--ink)]"
-                                    title="放大查看"
-                                  >
-                                    <ZoomIn className="size-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDownload(image.url)}
-                                    className="rounded-lg p-1.5 text-[var(--ink-soft)] transition hover:bg-[var(--surface-strong)] hover:text-[var(--ink)]"
-                                    title="下载保存"
-                                  >
-                                    <Download className="size-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="rounded-2xl rounded-tl-none border border-rose-500/20 bg-rose-500/10 px-5 py-3.5 text-sm text-rose-400">
-                        {generation.errorMessage ? `生成失败：${generation.errorMessage}` : "生成失败或图片未能成功返回。"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ))
-          )}
-          
-          {/* 单条 generation 自身的 pending 状态会渲染为占位卡片，
-              这里不再需要全局 loading：发送多次时每条独立显示。 */}
-        </div>
+        <ImageZoomModal
+          src={zoomedImage}
+          onClose={() => setZoomedImage(null)}
+          onDownload={handleDownload}
+          onUseForEdit={(url) => void handleUseImageForEdit(url)}
+        />
       </div>
 
-      {/* 底部输入悬浮区 */}
-      <div className="absolute bottom-0 inset-x-0 z-20 bg-gradient-to-t from-[var(--surface)] via-[var(--surface)]/95 to-transparent pt-6 pb-4 px-4 md:px-8">
-        <div className="mx-auto max-w-4xl">
-          <div className="noise-overlay relative flex flex-col rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)]/70 backdrop-blur-2xl shadow-xl transition-all duration-300 ring-1 ring-white/5">
-
-            {/* 参考图区域 */}
-            {referenceImages.length > 0 && (
-              <div className="flex flex-wrap items-start gap-2 px-5 pb-1 pt-5">
-                {referenceImages.map((referenceImage, index) => (
-                  <div key={referenceImage.id} className="group relative overflow-hidden rounded-xl border border-[var(--line)]">
-                    <img src={referenceImage.previewUrl} alt="Reference" className="h-20 w-auto object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => removeReferenceImage(referenceImage.id)}
-                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity hover:bg-rose-500 group-hover:opacity-100"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                    <div className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[10px] text-white">
-                      参考图 {index + 1}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* 错误提示 */}
-            {error && (
-              <div className="mx-5 mt-4">
-                <Alert variant="error" onDismiss={() => setError(null)}>
-                  {error}
-                </Alert>
-              </div>
-            )}
-
-            {/* 输入框主区域 */}
-            <div className="flex items-end gap-3 px-4 py-3">
-              <div className="flex-1 min-w-0">
-                <textarea
-                  ref={textareaRef}
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                  onPaste={handlePaste}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      if (!isPending && (prompt.trim() || referenceImages.length > 0)) {
-                        handleSubmit();
-                      }
-                    }
-                  }}
-                  placeholder={
-                    generationType === "image_to_image" || referenceImages.length > 0
-                      ? "描述你希望如何修改这些参考图..."
-                      : "输入提示词生成图片，或直接粘贴图片进入图生图..."
-                  }
-                  className="w-full resize-none bg-transparent py-1 text-sm text-[var(--ink)] placeholder:text-[var(--ink-soft)]/50 outline-none max-h-[120px]"
-                  style={{ minHeight: "36px" }}
-                  rows={1}
-                />
-              </div>
-
-              <div className="flex shrink-0 items-center gap-2 mb-1">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => {
-                    void handleReferenceImageChange(event.target.files ?? null);
-                    event.target.value = "";
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="rounded-full p-2.5 text-[var(--ink-soft)] transition hover:bg-[var(--line)] hover:text-[var(--ink)]"
-                  title="上传参考图"
-                >
-                  <Paperclip className="size-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  aria-label="发送"
-                  disabled={isPending || (!prompt.trim() && referenceImages.length === 0)}
-                  className="group relative flex size-10 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[var(--ink)] text-white shadow-md transition-all duration-200 ease-out hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-md"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-tr from-[var(--accent)] to-[var(--accent-soft)] opacity-0 transition-opacity group-hover:opacity-100" />
-                  {isPending ? (
-                    <Sparkles className="relative z-10 size-4 animate-spin" />
-                  ) : (
-                    <Send className="relative z-10 size-4 -ml-0.5 mt-0.5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* 底部控制栏 */}
-            <div className="flex items-center justify-between border-t border-[var(--line)]/50 px-4 py-2">
-              <div className="flex flex-wrap items-center gap-2">
-                {/* 模式切换 */}
-                <div className="flex items-center rounded-lg bg-[var(--surface-strong)] p-0.5">
-                  <button
-                    onClick={() => setGenerationType("text_to_image")}
-                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                      generationType === "text_to_image" ? "bg-white text-black shadow-sm" : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
-                    }`}
-                  >
-                    文生图
-                  </button>
-                  <button
-                    onClick={() => {
-                      setGenerationType("image_to_image");
-                      if (referenceImages.length === 0) fileInputRef.current?.click();
-                    }}
-                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                      generationType === "image_to_image" ? "bg-white text-black shadow-sm" : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
-                    }`}
-                  >
-                    图生图
-                  </button>
-                </div>
-
-                <label className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs text-[var(--ink-soft)]">
-                  <span className="shrink-0">尺寸</span>
-                  <select
-                    aria-label="尺寸"
-                    value={sizeSelectValue}
-                    onChange={(event) => handleSizeSelect(event.target.value)}
-                    className="min-w-0 bg-transparent text-xs font-medium text-[var(--ink)] outline-none"
-                  >
-                    {SIZE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.detail ? `${option.label} · ${option.detail}` : option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {/* 高级设置按钮 */}
-                <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                    showSettings ? "bg-[var(--accent)]/10 text-[var(--accent)]" : "text-[var(--ink-soft)] hover:bg-[var(--surface-strong)]"
-                  }`}
-                >
-                  <Settings2 className="size-3.5" />
-                  高级设置
-                </button>
-              </div>
-
-              {/* 右侧：渠道 + 模型选择 */}
-              <div className="hidden md:flex items-center gap-3">
-                {channels.length > 1 && (
-                  <select
-                    value={selectedChannelId ?? ""}
-                    onChange={(e) => {
-                      setSelectedChannelId(e.target.value);
-                      const ch = channels.find((c) => c.id === e.target.value);
-                      if (ch) setModel(ch.defaultModel);
-                    }}
-                    className="bg-transparent text-xs font-medium text-[var(--ink)] outline-none border-none cursor-pointer"
-                  >
-                    {channels.map((ch) => (
-                      <option key={ch.id} value={ch.id}>{ch.name}</option>
-                    ))}
-                  </select>
-                )}
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="bg-transparent text-xs font-medium text-[var(--ink)] outline-none border-none cursor-pointer"
-                >
-                  <option value={model}>{model}</option>
-                  {(selectedChannel?.models ?? []).map((m: string) => (
-                    m !== model && <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* 高级设置面板 (展开) */}
-            <AnimatePresence>
-              {showSettings && (
-                <motion.div
-                  key="advanced-settings"
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="overflow-hidden rounded-b-[2rem] border-t border-[var(--line)]/50 bg-[var(--surface)]/50 p-5"
-                >
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-4">
-                    {sizeSelectValue === "custom" && (
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium text-[var(--ink-soft)]">自定义尺寸</label>
-                        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                          <input
-                            aria-label="自定义宽度"
-                            inputMode="numeric"
-                            value={customWidth}
-                            onChange={(event) => updateCustomSize(event.target.value, customHeight)}
-                            className="min-w-0 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]/50 px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-                          />
-                          <span className="text-xs text-[var(--ink-soft)]">x</span>
-                          <input
-                            aria-label="自定义高度"
-                            inputMode="numeric"
-                            value={customHeight}
-                            onChange={(event) => updateCustomSize(customWidth, event.target.value)}
-                            className="min-w-0 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]/50 px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-                          />
-                        </div>
-                        <p className="mt-2 text-[11px] leading-relaxed text-[var(--ink-soft)]">
-                          将使用 {normalizedCustomSize ?? "有效尺寸"}，宽高会规整到 {imageSizeLimits.multiple}px 倍数，最大边 {imageSizeLimits.maxEdge}px。
-                        </p>
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-[var(--ink-soft)]">生成张数</label>
-                      <div className="flex gap-2">
-                        {[1, 2, 3, 4].map((num) => (
-                          <button
-                            key={num}
-                            onClick={() => setCount(num)}
-                            className={`flex-1 rounded-lg border py-1.5 text-sm transition-colors ${
-                              count === num ? "border-[var(--accent)] bg-[var(--accent)]/5 text-[var(--accent)] font-medium" : "border-[var(--line)] bg-[var(--surface-strong)] text-[var(--ink-soft)] hover:border-[var(--ink-soft)]"
-                            }`}
-                          >
-                            {num}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <label>
-                        <span className="mb-1.5 block text-xs font-medium text-[var(--ink-soft)]">质量</span>
-                        <select
-                          aria-label="质量"
-                          value={quality}
-                          onChange={(event) => setQuality(event.target.value as GenerationQuality)}
-                          className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]/50 px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-                        >
-                          {QUALITY_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span className="mb-1.5 block text-xs font-medium text-[var(--ink-soft)]">格式</span>
-                        <select
-                          aria-label="格式"
-                          value={outputFormat}
-                          onChange={(event) => setOutputFormat(event.target.value as GenerationOutputFormat)}
-                          className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]/50 px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-                        >
-                          {OUTPUT_FORMAT_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-
-                    {outputFormat !== "png" && (
-                      <label>
-                        <span className="mb-1.5 block text-xs font-medium text-[var(--ink-soft)]">压缩质量 {outputCompression}%</span>
-                        <input
-                          aria-label="压缩质量"
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={outputCompression}
-                          onChange={(event) => setOutputCompression(Number(event.target.value))}
-                          className="w-full accent-[var(--accent)]"
-                        />
-                      </label>
-                    )}
-
-                    <label>
-                      <span className="mb-1.5 block text-xs font-medium text-[var(--ink-soft)]">审核策略</span>
-                      <select
-                        aria-label="审核策略"
-                        value={moderation}
-                        onChange={(event) => setModeration(event.target.value as GenerationModeration)}
-                        className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]/50 px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-                      >
-                        {MODERATION_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </label>
-
-                    {generationType === "text_to_image" && (
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium text-[var(--ink-soft)]">负向提示词</label>
-                        <textarea
-                          value={negativePrompt}
-                          onChange={(e) => setNegativePrompt(e.target.value)}
-                          placeholder="例如：畸形、低画质"
-                          className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]/50 px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
-                          rows={2}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <p className="mt-5 text-[11px] leading-relaxed text-[var(--ink-soft)]">
-                  2K/4K 属于高分辨率请求，真实生效情况由当前渠道和模型决定；超大尺寸会更慢，失败时可切回 1K 或自动。
-                </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      </div>
-
-      {/* 图片放大预览遮罩 */}
-      <AnimatePresence>
-        {zoomedImage && (
-          <motion.div
-            key="zoomed-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
-            onClick={() => setZoomedImage(null)}
-          >
-            <button
-              type="button"
-              className="absolute right-6 top-6 cursor-pointer text-white/70 transition hover:text-white"
-              onClick={() => setZoomedImage(null)}
-              aria-label="关闭"
-            >
-              <X className="size-8" />
-            </button>
-            <motion.img
-              initial={{ scale: 0.96, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              src={zoomedImage}
-              alt="放大查看"
-              decoding="async"
-              className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <div className="absolute bottom-8 flex items-center gap-4">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDownload(zoomedImage);
-                }}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-white/20 px-6 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-md transition-all duration-200 ease-out hover:bg-[var(--accent)] hover:shadow-xl"
-              >
-                <Download className="size-4" />
-                保存高清原图
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleUseImageForEdit(zoomedImage);
-                  setZoomedImage(null);
-                }}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black shadow-lg transition-all duration-200 ease-out hover:bg-[var(--accent)] hover:text-white hover:shadow-xl"
-              >
-                <ImagePlus className="size-4" />
-                加入编辑
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      </div>
-
-      {/* 右侧历史图片栏：自动向上滚动，悬停暂停，点击复用 zoomedImage 放大遮罩 */}
-      <aside className="hidden md:flex h-full w-60 shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)] overflow-hidden">
-        <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
-          <h3 className="text-xs font-medium text-[var(--ink)]">历史图片</h3>
-          <span className="text-[10px] text-[var(--ink-soft)]/70">悬停暂停</span>
-        </div>
-        {historyImages.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center px-4 text-center">
-            <p className="text-xs leading-relaxed text-[var(--ink-soft)]/70">
-              还没有作品
-              <br />
-              先生成一张吧
-            </p>
-          </div>
-        ) : (
-          <div
-            className="history-rail flex-1 overflow-hidden"
-            style={
-              {
-                "--history-rail-duration": `${Math.max(40, historyImages.length * 3)}s`,
-              } as React.CSSProperties
-            }
-          >
-            <div className="history-rail-track flex flex-col gap-2 px-3 py-3">
-              {[...historyImages, ...historyImages].map((image, index) => (
-                <button
-                  key={`${image.id}_${index}`}
-                  type="button"
-                  onClick={() => setZoomedImage(image.url)}
-                  className="group block w-full overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]/40 transition hover:border-[var(--accent)]"
-                  title="点击放大查看"
-                >
-                  <img
-                    src={getThumbUrl(image.url, 256)}
-                    alt="历史图片"
-                    loading="lazy"
-                    decoding="async"
-                    className="block h-auto w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                  />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </aside>
+      <HistoryRail images={historyImages} onPickImage={(url) => setZoomedImage(url)} />
     </div>
   );
 }

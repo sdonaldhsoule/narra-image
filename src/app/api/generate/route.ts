@@ -99,9 +99,24 @@ export async function POST(request: Request) {
 
     // 创建 PENDING 任务并预扣积分。预扣可避免连续点击造成的并发越扣，
     // 失败时在 after() 内退还。
+    // 若提供 conversationId，先校验所有权防止跨用户写入；自动续推该会话的 updatedAt（首条 generation 还会刷新 title）。
+    const inputConversationId = body.conversationId as string | undefined;
+    let conversationToBind: string | null = null;
+    if (inputConversationId) {
+      const owned = await db.conversation.findFirst({
+        where: { id: inputConversationId, userId: user.id },
+        select: { id: true, generations: { select: { id: true }, take: 1 } },
+      });
+      if (!owned) {
+        return jsonError("会话不存在或不属于当前用户", 400);
+      }
+      conversationToBind = owned.id;
+    }
+
     const job = await db.$transaction(async (tx) => {
       const created = await tx.generationJob.create({
         data: {
+          ...(conversationToBind ? { conversationId: conversationToBind } : {}),
           count: body.count,
           creditsSpent: body.providerMode === "built_in" ? cost : 0,
           generationType: toPrismaGenerationType(body.generationType),
@@ -122,6 +137,21 @@ export async function POST(request: Request) {
           images: true,
         },
       });
+
+      if (conversationToBind) {
+        // 触发 updatedAt 刷新；若是会话内首条 generation，把 prompt 截前 30 字符作为 title 默认。
+        const existingCount = await tx.generationJob.count({
+          where: { conversationId: conversationToBind, NOT: { id: created.id } },
+        });
+        const updateData: { updatedAt: Date; title?: string } = { updatedAt: new Date() };
+        if (existingCount === 0 && body.prompt) {
+          updateData.title = body.prompt.slice(0, 30);
+        }
+        await tx.conversation.update({
+          where: { id: conversationToBind },
+          data: updateData,
+        });
+      }
 
       if (body.providerMode === "built_in" && cost > 0) {
         await tx.user.update({

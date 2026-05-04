@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getCheckInSummary } from "@/lib/benefits/config";
 import { db } from "@/lib/db";
-import { serializeGeneration, serializeUser } from "@/lib/prisma-mappers";
+import { serializeConversation, serializeGeneration, serializeUser } from "@/lib/prisma-mappers";
 import { getCurrentUserRecord } from "@/lib/server/current-user";
 import { GeneratorStudio } from "@/components/create/generator-studio";
 import { SiteHeader } from "@/components/marketing/site-header";
@@ -16,7 +16,7 @@ export default async function CreatePage() {
     redirect("/login");
   }
 
-  const [jobs, channels, checkInSummary] = await Promise.all([
+  const [jobs, channels, checkInSummary, conversations] = await Promise.all([
     db.generationJob.findMany({
       where: { userId: user.id },
       include: {
@@ -29,6 +29,17 @@ export default async function CreatePage() {
     }),
     getActiveChannels(),
     getCheckInSummary(user.id),
+    db.conversation.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        generations: {
+          select: { id: true, createdAt: true },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      take: 100,
+    }),
   ]);
 
   const currentUser = serializeUser(user);
@@ -49,6 +60,7 @@ export default async function CreatePage() {
           checkInSummary={checkInSummary}
           currentUser={currentUser}
           initialGenerations={jobs.map(serializeGeneration)}
+          initialConversations={conversations.map(serializeConversation)}
           channels={serializedChannels}
         />
       </section>
