@@ -30,6 +30,7 @@ export async function SiteHeader({
     { href: "/", label: "首页" },
     { href: "/create", label: "创作台" },
     { href: "/works", label: "作品" },
+    ...(currentUser ? [{ href: "/api-keys", label: "API" }] : []),
     ...(currentUser?.role === "admin"
       ? [{ href: "/admin", label: "管理后台" }]
       : []),
