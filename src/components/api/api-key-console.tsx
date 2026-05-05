@@ -51,6 +51,8 @@ export function ApiKeyConsole({ apiBaseUrl, apiKeys, apiConfig }: ApiKeyConsoleP
     () => items.filter((item) => item.status === "active").length,
     [items],
   );
+  const normalizedApiBaseUrl = apiBaseUrl.replace(/\/$/, "");
+  const openAiBaseUrl = `${normalizedApiBaseUrl}/v1`;
 
   async function copyText(text: string) {
     try {
@@ -253,12 +255,13 @@ export function ApiKeyConsole({ apiBaseUrl, apiKeys, apiConfig }: ApiKeyConsoleP
             <div>
               <h2 className="font-semibold text-[var(--ink)]">调用示例</h2>
               <p className="mt-1 text-xs text-[var(--ink-soft)]">
-                API 基础地址：<span className="font-mono text-[var(--ink)]">{apiBaseUrl}</span>
+                OpenAI 客户端 Base URL：
+                <span className="font-mono text-[var(--ink)]">{openAiBaseUrl}</span>
               </p>
             </div>
             <button
               type="button"
-              onClick={() => void copyText(apiBaseUrl)}
+              onClick={() => void copyText(openAiBaseUrl)}
               className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--line)] px-3 py-2 text-xs font-medium text-[var(--ink-soft)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               <Copy className="size-3.5" />
@@ -266,13 +269,13 @@ export function ApiKeyConsole({ apiBaseUrl, apiKeys, apiConfig }: ApiKeyConsoleP
             </button>
           </div>
           <pre className="mt-4 overflow-x-auto rounded-2xl bg-[var(--ink)] p-4 text-xs leading-relaxed text-white">
-{`curl -X POST ${apiBaseUrl}/v1/images/generations \\
+{`curl -X POST ${openAiBaseUrl}/images/generations \\
   -H "Authorization: Bearer narra_sk_xxx" \\
   -H "Content-Type: application/json" \\
-  -d '{"prompt":"一张手绘风格的咖啡店海报","size":"1024x1024"}'`}
+  -d '{"prompt":"一张手绘风格的咖啡店海报","size":"1024x1024","response_format":"url"}'`}
           </pre>
           <pre className="mt-3 overflow-x-auto rounded-2xl bg-[var(--ink)] p-4 text-xs leading-relaxed text-white">
-{`curl -X POST ${apiBaseUrl}/v1/chat/completions \\
+{`curl -X POST ${openAiBaseUrl}/chat/completions \\
   -H "Authorization: Bearer narra_sk_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"narra-image","messages":[{"role":"user","content":"画一只赛博风格的猫"}]}'`}

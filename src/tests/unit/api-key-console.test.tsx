@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ApiKeyConsole } from "@/components/api/api-key-console";
 
 describe("API 控制台", () => {
-  it("调用示例使用站点 API 基础地址", () => {
+  it("调用示例使用 OpenAI 兼容 Base URL", () => {
     render(
       <ApiKeyConsole
         apiBaseUrl="https://narra.example.com"
@@ -17,7 +17,7 @@ describe("API 控制台", () => {
       />,
     );
 
-    expect(screen.getByText("https://narra.example.com")).toBeInTheDocument();
+    expect(screen.getByText("https://narra.example.com/v1")).toBeInTheDocument();
     expect(screen.getByText(/https:\/\/narra\.example\.com\/v1\/images\/generations/))
       .toBeInTheDocument();
     expect(screen.getByText(/https:\/\/narra\.example\.com\/v1\/chat\/completions/))

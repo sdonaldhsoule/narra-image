@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { parseChatGenerationInput } from "@/lib/external-api/chat";
-import { openAiError, unixSeconds } from "@/lib/external-api/http";
+import { openAiChatStream, openAiError, unixSeconds } from "@/lib/external-api/http";
 import { runExternalGeneration } from "@/lib/generation/external-api";
 import { requireApiUser } from "@/lib/server/api-auth";
 import { parseJsonBody } from "@/lib/server/http";
@@ -11,9 +11,6 @@ export async function POST(request: Request) {
   try {
     const auth = await requireApiUser(request);
     const body = externalChatCompletionSchema.parse(await parseJsonBody(request));
-    if (body.stream) {
-      throw new Error("当前暂不支持 stream=true");
-    }
 
     const parsed = await parseChatGenerationInput(body);
     const job = await runExternalGeneration({
@@ -37,6 +34,19 @@ export async function POST(request: Request) {
       .map((image, index) => `![image-${index + 1}](${image.url})\n${image.url}`)
       .join("\n\n");
     const content = `生成完成。\n\n${imageMarkdown}`;
+    const created = unixSeconds(job.createdAt);
+    const id = `chatcmpl_${job.id}`;
+    const model = body.model ?? job.model;
+
+    if (body.stream) {
+      return openAiChatStream({
+        content,
+        created,
+        generationId: job.id,
+        id,
+        model,
+      });
+    }
 
     return NextResponse.json({
       choices: [
@@ -49,11 +59,16 @@ export async function POST(request: Request) {
           },
         },
       ],
-      created: unixSeconds(job.createdAt),
+      created,
       generation_id: job.id,
-      id: `chatcmpl_${job.id}`,
-      model: body.model ?? job.model,
+      id,
+      model,
       object: "chat.completion",
+      usage: {
+        completion_tokens: 0,
+        prompt_tokens: 0,
+        total_tokens: 0,
+      },
     });
   } catch (error) {
     return openAiError(error);

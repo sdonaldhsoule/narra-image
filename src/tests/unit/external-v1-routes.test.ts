@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockDownloadExternalImage,
@@ -71,6 +71,7 @@ const completedJob = {
   ],
   model: "gpt-image-2",
 };
+const imageBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 function jsonRequest(path: string, body: unknown) {
   return new Request(`http://localhost${path}`, {
@@ -97,6 +98,21 @@ describe("OpenAI 兼容外部 API", () => {
     });
     mockRequireApiUser.mockResolvedValue(auth);
     mockRunExternalGeneration.mockResolvedValue(completedJob);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(imageBytes, {
+          headers: {
+            "content-length": String(imageBytes.length),
+            "content-type": "image/png",
+          },
+        }),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("/v1/images/generations 返回图片生成结果", async () => {
@@ -130,6 +146,31 @@ describe("OpenAI 兼容外部 API", () => {
     );
   });
 
+  it("/v1/images/generations 支持 Cherry Studio 常用的 b64_json 返回", async () => {
+    const response = await imagePost(
+      jsonRequest("/v1/images/generations", {
+        prompt: "测试提示词",
+        response_format: "b64_json",
+        size: "1024x1024",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      created: 1777982400,
+      data: [
+        {
+          b64_json: imageBytes.toString("base64"),
+          height: 1024,
+          url: "https://example.com/out.png",
+          width: 1024,
+        },
+      ],
+      generation_id: "job_1",
+    });
+    expect(fetch).toHaveBeenCalledWith("https://example.com/out.png");
+  });
+
   it("/v1/chat/completions 将最后一条 user 消息转成生图请求", async () => {
     const response = await chatPost(
       jsonRequest("/v1/chat/completions", {
@@ -145,11 +186,40 @@ describe("OpenAI 兼容外部 API", () => {
     const json = await response.json();
     expect(json.object).toBe("chat.completion");
     expect(json.choices[0].message.content).toContain("https://example.com/out.png");
+    expect(json.usage).toEqual({
+      completion_tokens: 0,
+      prompt_tokens: 0,
+      total_tokens: 0,
+    });
     expect(mockRunExternalGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
         input: expect.objectContaining({
           generationType: "text_to_image",
           prompt: "画一张海报",
+        }),
+      }),
+    );
+  });
+
+  it("/v1/chat/completions 兼容 stream=true 的客户端", async () => {
+    const response = await chatPost(
+      jsonRequest("/v1/chat/completions", {
+        messages: [{ role: "user", content: "画一张流式兼容测试图" }],
+        model: "narra-image",
+        stream: true,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const text = await response.text();
+    expect(text).toContain('"object":"chat.completion.chunk"');
+    expect(text).toContain("https://example.com/out.png");
+    expect(text).toContain("data: [DONE]");
+    expect(mockRunExternalGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          prompt: "画一张流式兼容测试图",
         }),
       }),
     );
