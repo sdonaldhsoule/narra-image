@@ -131,6 +131,20 @@ describe("后台生成记录列表视图", () => {
     expect(screen.getByText("图生图上传参考图")).toBeInTheDocument();
   });
 
+  it("列表视图点击生成图时放大图片而不是打开提示词", async () => {
+    const user = userEvent.setup();
+    render(<GenerationAdminList jobs={[createJob()]} />);
+
+    await user.click(screen.getByRole("button", { name: "查看生成图片 job_1" }));
+
+    expect(screen.getByAltText("生成图片大图")).toHaveAttribute(
+      "src",
+      "https://example.com/image.png",
+    );
+    expect(screen.getByText("生成图片")).toBeInTheDocument();
+    expect(screen.queryByText("完整提示词")).not.toBeInTheDocument();
+  });
+
   it("卡片视图展示图生图参考图", async () => {
     const user = userEvent.setup();
     render(

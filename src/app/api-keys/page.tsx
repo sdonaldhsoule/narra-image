@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/marketing/site-header";
 import { getApiConfig, serializeApiConfig } from "@/lib/api-config";
 import { serializeApiKey } from "@/lib/api-keys";
 import { db } from "@/lib/db";
+import { getEnv } from "@/lib/env";
 import { serializeUser } from "@/lib/prisma-mappers";
 import { getCurrentUserRecord } from "@/lib/server/current-user";
 
@@ -28,6 +29,7 @@ export default async function ApiKeysPage() {
     }),
     getApiConfig(),
   ]);
+  const apiBaseUrl = getEnv().APP_URL.replace(/\/$/, "");
 
   return (
     <main className="pb-20">
@@ -43,6 +45,7 @@ export default async function ApiKeysPage() {
         </div>
 
         <ApiKeyConsole
+          apiBaseUrl={apiBaseUrl}
           apiKeys={apiKeys.map(serializeApiKey)}
           apiConfig={serializeApiConfig(apiConfig)}
         />

@@ -121,6 +121,7 @@ export function GenerationAdminList({ jobs }: { jobs: GenerationAdminJob[] }) {
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [promptJob, setPromptJob] = useState<GenerationAdminJob | null>(null);
+  const [zoomedGeneratedImage, setZoomedGeneratedImage] = useState<string | null>(null);
   const [zoomedSourceImage, setZoomedSourceImage] = useState<string | null>(null);
   const [deleteTargetIds, setDeleteTargetIds] = useState<string[] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -299,9 +300,10 @@ export function GenerationAdminList({ jobs }: { jobs: GenerationAdminJob[] }) {
                       {image ? (
                         <button
                           type="button"
-                          onClick={() => setPromptJob(job)}
+                          onClick={() => setZoomedGeneratedImage(image.url)}
                           className="block overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]"
-                          title="查看提示词"
+                          title="查看生成图片"
+                          aria-label={`查看生成图片 ${job.id}`}
                         >
                           <img
                             src={getThumbUrl(image.url, 96)}
@@ -438,6 +440,18 @@ export function GenerationAdminList({ jobs }: { jobs: GenerationAdminJob[] }) {
           negativePrompt={promptJob.negativePrompt}
           onClose={() => setPromptJob(null)}
         />
+      ) : null}
+
+      {zoomedGeneratedImage ? (
+        <ImageLightbox
+          src={zoomedGeneratedImage}
+          alt="生成图片大图"
+          onClose={() => setZoomedGeneratedImage(null)}
+        >
+          <span className="rounded-full bg-white/90 px-4 py-2 text-sm font-medium text-[var(--ink)]">
+            生成图片
+          </span>
+        </ImageLightbox>
       ) : null}
 
       {zoomedSourceImage ? (

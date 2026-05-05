@@ -24,6 +24,7 @@ type ApiConfigView = {
 type ApiKeyConsoleProps = {
   apiKeys: ApiKeyItem[];
   apiConfig: ApiConfigView;
+  apiBaseUrl: string;
 };
 
 function formatDate(value: string | null) {
@@ -37,7 +38,7 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-export function ApiKeyConsole({ apiKeys, apiConfig }: ApiKeyConsoleProps) {
+export function ApiKeyConsole({ apiBaseUrl, apiKeys, apiConfig }: ApiKeyConsoleProps) {
   const [items, setItems] = useState(apiKeys);
   const [name, setName] = useState("默认 API Key");
   const [secret, setSecret] = useState<string | null>(null);
@@ -248,15 +249,30 @@ export function ApiKeyConsole({ apiKeys, apiConfig }: ApiKeyConsoleProps) {
         </div>
 
         <div className="studio-card rounded-[1.8rem] p-6">
-          <h2 className="font-semibold text-[var(--ink)]">调用示例</h2>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-[var(--ink)]">调用示例</h2>
+              <p className="mt-1 text-xs text-[var(--ink-soft)]">
+                API 基础地址：<span className="font-mono text-[var(--ink)]">{apiBaseUrl}</span>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void copyText(apiBaseUrl)}
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--line)] px-3 py-2 text-xs font-medium text-[var(--ink-soft)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              <Copy className="size-3.5" />
+              复制地址
+            </button>
+          </div>
           <pre className="mt-4 overflow-x-auto rounded-2xl bg-[var(--ink)] p-4 text-xs leading-relaxed text-white">
-{`curl -X POST https://your-domain.com/v1/images/generations \\
+{`curl -X POST ${apiBaseUrl}/v1/images/generations \\
   -H "Authorization: Bearer narra_sk_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{"prompt":"一张手绘风格的咖啡店海报","size":"1024x1024"}'`}
           </pre>
           <pre className="mt-3 overflow-x-auto rounded-2xl bg-[var(--ink)] p-4 text-xs leading-relaxed text-white">
-{`curl -X POST https://your-domain.com/v1/chat/completions \\
+{`curl -X POST ${apiBaseUrl}/v1/chat/completions \\
   -H "Authorization: Bearer narra_sk_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"narra-image","messages":[{"role":"user","content":"画一只赛博风格的猫"}]}'`}
