@@ -34,6 +34,7 @@ type CustomProviderConfig = {
 
 type GenerateImagesInput = {
   count: number;
+  builtInProvider?: CustomProviderConfig | null;
   customProvider: CustomProviderConfig | null;
   generationType: GenerationType;
   model: string;
@@ -60,7 +61,7 @@ type GenerateImagesInput = {
 };
 
 export async function generateImages(input: GenerateImagesInput) {
-  const builtInConfig = await getBuiltInProviderConfig();
+  const builtInConfig = input.builtInProvider ?? await getBuiltInProviderConfig();
   const provider = resolveGenerationProvider({
     builtIn: {
       apiKey: builtInConfig.apiKey,

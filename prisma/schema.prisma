@@ -27,6 +27,11 @@ enum GenerationType {
   IMAGE_TO_IMAGE
 }
 
+enum GenerationClientSource {
+  WEB
+  API
+}
+
 enum ShowcaseStatus {
   PRIVATE
   PENDING
@@ -64,6 +69,7 @@ model User {
   createdRedeemCodes   RedeemCode[]         @relation("RedeemCodeCreatedBy")
   redeemRedemptions    RedeemRedemption[]
   conversations        Conversation[]
+  apiKeys              ApiKey[]
 
   @@index([oauthProvider, oauthId])
 }
@@ -100,6 +106,16 @@ model TurnstileConfig {
   protectGenerate     Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+model ApiConfig {
+  id                String   @id @default(cuid())
+  scope             String   @unique @default("default")
+  isEnabled         Boolean  @default(true)
+  requestsPerMinute Int      @default(20)
+  requestsPerDay    Int      @default(500)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model OAuthProvider {
@@ -243,34 +259,57 @@ model SavedProviderConfig {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model GenerationJob {
-  id              String            @id @default(cuid())
-  userId          String
-  conversationId  String?
-  generationType  GenerationType    @default(TEXT_TO_IMAGE)
-  providerMode    ProviderMode
-  model           String
-  prompt          String
-  negativePrompt  String?
-  size            String
-  quality         String            @default("auto")
-  outputFormat    String            @default("png")
-  outputCompression Int?
-  moderation      String            @default("auto")
-  sourceImageUrls String[]          @default([])
-  count           Int
-  status          GenerationStatus  @default(PENDING)
-  errorMessage    String?
-  creditsSpent    Int               @default(0)
-  featuredAt      DateTime?
-  featuredById    String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  featuredBy      User?             @relation("FeaturedByAdmin", fields: [featuredById], references: [id])
-  conversation    Conversation?     @relation(fields: [conversationId], references: [id], onDelete: SetNull)
-  images          GenerationImage[]
+model ApiKey {
+  id          String          @id @default(cuid())
+  userId      String
+  name        String
+  keyHash     String          @unique
+  keyPrefix   String
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generations GenerationJob[]
 
+  @@index([userId])
+  @@index([revokedAt])
+}
+
+model GenerationJob {
+  id                String                 @id @default(cuid())
+  userId            String
+  apiKeyId          String?
+  conversationId    String?
+  clientSource      GenerationClientSource @default(WEB)
+  generationType    GenerationType         @default(TEXT_TO_IMAGE)
+  providerMode      ProviderMode
+  model             String
+  prompt            String
+  negativePrompt    String?
+  size              String
+  quality           String                 @default("auto")
+  outputFormat      String                 @default("png")
+  outputCompression Int?
+  moderation        String                 @default("auto")
+  sourceImageUrls   String[]               @default([])
+  count             Int
+  status            GenerationStatus       @default(PENDING)
+  errorMessage      String?
+  creditsSpent      Int                    @default(0)
+  featuredAt        DateTime?
+  featuredById      String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKey            ApiKey?                @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  featuredBy        User?                  @relation("FeaturedByAdmin", fields: [featuredById], references: [id])
+  conversation      Conversation?          @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  images            GenerationImage[]
+
+  @@index([apiKeyId])
+  @@index([apiKeyId, clientSource, createdAt])
+  @@index([clientSource])
   @@index([conversationId])
 }
 

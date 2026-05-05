@@ -171,3 +171,79 @@ export const profileUpdateSchema = z.object({
     .optional()
     .nullable(),
 });
+
+export const apiKeyCreateSchema = z.object({
+  name: z.string().trim().min(1, "请输入 API Key 名称").max(40, "名称最多 40 个字符"),
+});
+
+export const apiConfigUpdateSchema = z.object({
+  isEnabled: z.boolean().optional(),
+  requestsPerDay: z.number().int().min(1).max(100000).optional(),
+  requestsPerMinute: z.number().int().min(1).max(1000).optional(),
+});
+
+export const externalImageGenerationSchema = z.object({
+  count: z.number().int().min(1).max(4).optional(),
+  model: z.string().trim().min(1).max(100).optional(),
+  moderation: generationModerationSchema.optional(),
+  n: z.number().int().min(1).max(4).optional(),
+  negative_prompt: z.string().trim().max(1000).optional().nullable(),
+  negativePrompt: z.string().trim().max(1000).optional().nullable(),
+  output_compression: generationOutputCompressionSchema,
+  output_format: generationOutputFormatSchema.optional(),
+  outputCompression: generationOutputCompressionSchema,
+  outputFormat: generationOutputFormatSchema.optional(),
+  prompt: z.string().trim().min(2, "提示词至少 2 个字符").max(2000),
+  quality: generationQualitySchema.optional(),
+  response_format: z.enum(["url", "b64_json"]).optional(),
+  seed: z.number().int().positive().optional().nullable(),
+  size: generationSizeSchema.optional(),
+}).transform((value) => {
+  const outputFormat = value.outputFormat ?? value.output_format ?? "png";
+  return {
+    count: value.count ?? value.n ?? 1,
+    model: value.model,
+    moderation: value.moderation ?? "auto",
+    negativePrompt: value.negativePrompt ?? value.negative_prompt ?? null,
+    outputCompression:
+      outputFormat === "png"
+        ? null
+        : value.outputCompression ?? value.output_compression ?? 100,
+    outputFormat,
+    prompt: value.prompt,
+    quality: value.quality ?? "auto",
+    responseFormat: value.response_format ?? "url",
+    seed: value.seed ?? null,
+    size: value.size ?? "auto",
+  };
+});
+
+const chatTextPartSchema = z.object({
+  text: z.string().max(2000),
+  type: z.literal("text"),
+});
+
+const chatImagePartSchema = z.object({
+  image_url: z.union([
+    z.string().url(),
+    z.object({
+      url: z.string().url(),
+    }),
+  ]),
+  type: z.literal("image_url"),
+});
+
+export const externalChatCompletionSchema = z.object({
+  messages: z.array(z.object({
+    content: z.union([
+      z.string().max(2000),
+      z.array(z.union([chatTextPartSchema, chatImagePartSchema])).max(12),
+    ]),
+    role: z.string(),
+  })).min(1, "messages 不能为空").max(20, "messages 最多 20 条"),
+  model: z.string().trim().max(100).optional(),
+  n: z.number().int().min(1).max(4).optional(),
+  quality: generationQualitySchema.optional(),
+  size: generationSizeSchema.optional(),
+  stream: z.boolean().optional(),
+});
