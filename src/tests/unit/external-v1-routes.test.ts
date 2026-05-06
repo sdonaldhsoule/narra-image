@@ -40,8 +40,11 @@ vi.mock("@/lib/providers/built-in-provider", () => ({
 
 import { POST as chatPost } from "@/app/v1/chat/completions/route";
 import { GET as generationGet } from "@/app/v1/generations/[id]/route";
+import { POST as imageEditPost } from "@/app/v1/images/edits/route";
 import { POST as imagePost } from "@/app/v1/images/generations/route";
 import { GET as modelsGet } from "@/app/v1/models/route";
+import { GET as rootModelsGet } from "@/app/models/route";
+import { POST as rootImagePost } from "@/app/images/generations/route";
 
 const auth = {
   apiKey: {
@@ -79,6 +82,16 @@ function jsonRequest(path: string, body: unknown) {
     headers: {
       Authorization: "Bearer narra_sk_test",
       "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+}
+
+function multipartRequest(path: string, formData: FormData) {
+  return new Request(`http://localhost${path}`, {
+    body: formData,
+    headers: {
+      Authorization: "Bearer narra_sk_test",
     },
     method: "POST",
   });
@@ -169,6 +182,110 @@ describe("OpenAI 兼容外部 API", () => {
       generation_id: "job_1",
     });
     expect(fetch).toHaveBeenCalledWith("https://example.com/out.png");
+  });
+
+  it("/v1/images/edits 支持 Kelivo 的远程参考图 JSON 请求", async () => {
+    const response = await imageEditPost(
+      jsonRequest("/v1/images/edits", {
+        images: [{ image_url: "https://example.com/source.png" }],
+        model: "gpt-image-2",
+        prompt: "把背景改成蓝色",
+        response_format: "url",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      created: 1777982400,
+      data: [
+        {
+          height: 1024,
+          url: "https://example.com/out.png",
+          width: 1024,
+        },
+      ],
+      generation_id: "job_1",
+    });
+    expect(mockDownloadExternalImage).toHaveBeenCalledWith(
+      "https://example.com/source.png",
+      0,
+    );
+    expect(mockRunExternalGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          generationType: "image_to_image",
+          prompt: "把背景改成蓝色",
+          sourceImages: [
+            {
+              data: Buffer.from([1, 2, 3]),
+              fileName: "source-1.png",
+              mimeType: "image/png",
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("/v1/images/edits 支持 Kelivo 的 multipart image[] 上传", async () => {
+    const formData = new FormData();
+    formData.append("model", "gpt-image-2");
+    formData.append("prompt", "改成胶片质感");
+    formData.append("image[]", new File([new Uint8Array([7, 8, 9])], "source.png", {
+      type: "image/png",
+    }));
+
+    const response = await imageEditPost(
+      multipartRequest("/v1/images/edits", formData),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRunExternalGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          generationType: "image_to_image",
+          prompt: "改成胶片质感",
+          sourceImages: [
+            {
+              data: Buffer.from([7, 8, 9]),
+              fileName: "source.png",
+              mimeType: "image/png",
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("根路径别名兼容未填写 /v1 的客户端", async () => {
+    const imageResponse = await rootImagePost(
+      jsonRequest("/images/generations", {
+        prompt: "根路径文生图",
+      }),
+    );
+
+    expect(imageResponse.status).toBe(200);
+
+    mockGetActiveChannels.mockResolvedValue([
+      {
+        defaultModel: "gpt-image-2",
+        models: ["gpt-image-2"],
+      },
+    ]);
+
+    const modelsResponse = await rootModelsGet(
+      new Request("http://localhost/models", {
+        headers: { Authorization: "Bearer narra_sk_test" },
+      }),
+    );
+
+    expect(modelsResponse.status).toBe(200);
+    await expect(modelsResponse.json()).resolves.toEqual({
+      data: [
+        { id: "gpt-image-2", object: "model", owned_by: "narra-image" },
+      ],
+      object: "list",
+    });
   });
 
   it("/v1/chat/completions 将最后一条 user 消息转成生图请求", async () => {

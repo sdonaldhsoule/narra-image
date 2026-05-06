@@ -218,6 +218,8 @@ export const externalImageGenerationSchema = z.object({
   };
 });
 
+export const externalImageEditSchema = externalImageGenerationSchema;
+
 const chatTextPartSchema = z.object({
   text: z.string().max(2000),
   type: z.literal("text"),
